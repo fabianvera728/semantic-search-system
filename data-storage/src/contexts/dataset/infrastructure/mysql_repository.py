@@ -156,10 +156,46 @@ class MySQLDatasetRepository(DatasetRepository):
                 dataset_rows = await cursor.fetchall()
                 
                 for dataset_row in dataset_rows:
-                    dataset_id = dataset_row[0]
-                    dataset = await self.find_by_id(UUID(dataset_id))
-                    if dataset:
-                        datasets.append(dataset)
+                    dataset_id = UUID(dataset_row[0])
+                    
+                    # Crear dataset con los datos de la consulta
+                    dataset = Dataset(
+                        id=dataset_id,
+                        name=dataset_row[1],
+                        description=dataset_row[2],
+                        created_at=datetime.fromisoformat(dataset_row[3]),
+                        updated_at=datetime.fromisoformat(dataset_row[4]),
+                        user_id=dataset_row[5],
+                        row_count=dataset_row[6],
+                        column_count=dataset_row[7],
+                        tags=json.loads(dataset_row[8]),
+                        is_public=bool(dataset_row[9])
+                    )
+                    
+                    # Obtener columnas
+                    await cursor.execute(
+                        """
+                        SELECT id, name, type, description
+                        FROM dataset_columns
+                        WHERE dataset_id = %s
+                        """,
+                        (str(dataset_id),)
+                    )
+                    
+                    column_rows = await cursor.fetchall()
+                    columns = []
+                    
+                    for column_row in column_rows:
+                        column = DatasetColumn(
+                            id=UUID(column_row[0]),
+                            name=column_row[1],
+                            type=column_row[2],
+                            description=column_row[3]
+                        )
+                        columns.append(column)
+                    
+                    dataset.columns = columns
+                    datasets.append(dataset)
                 
         return datasets
 
@@ -182,10 +218,46 @@ class MySQLDatasetRepository(DatasetRepository):
                 dataset_rows = await cursor.fetchall()
                 
                 for dataset_row in dataset_rows:
-                    dataset_id = dataset_row[0]
-                    dataset = await self.find_by_id(UUID(dataset_id))
-                    if dataset:
-                        datasets.append(dataset)
+                    dataset_id = UUID(dataset_row[0])
+                    
+                    # Crear dataset con los datos de la consulta
+                    dataset = Dataset(
+                        id=dataset_id,
+                        name=dataset_row[1],
+                        description=dataset_row[2],
+                        created_at=datetime.fromisoformat(dataset_row[3]),
+                        updated_at=datetime.fromisoformat(dataset_row[4]),
+                        user_id=dataset_row[5],
+                        row_count=dataset_row[6],
+                        column_count=dataset_row[7],
+                        tags=json.loads(dataset_row[8]),
+                        is_public=bool(dataset_row[9])
+                    )
+                    
+                    # Obtener columnas
+                    await cursor.execute(
+                        """
+                        SELECT id, name, type, description
+                        FROM dataset_columns
+                        WHERE dataset_id = %s
+                        """,
+                        (str(dataset_id),)
+                    )
+                    
+                    column_rows = await cursor.fetchall()
+                    columns = []
+                    
+                    for column_row in column_rows:
+                        column = DatasetColumn(
+                            id=UUID(column_row[0]),
+                            name=column_row[1],
+                            type=column_row[2],
+                            description=column_row[3]
+                        )
+                        columns.append(column)
+                    
+                    dataset.columns = columns
+                    datasets.append(dataset)
                 
         return datasets
 
@@ -208,10 +280,46 @@ class MySQLDatasetRepository(DatasetRepository):
                 dataset_rows = await cursor.fetchall()
                 
                 for dataset_row in dataset_rows:
-                    dataset_id = dataset_row[0]
-                    dataset = await self.find_by_id(UUID(dataset_id))
-                    if dataset:
-                        datasets.append(dataset)
+                    dataset_id = UUID(dataset_row[0])
+                    
+                    # Crear dataset con los datos de la consulta
+                    dataset = Dataset(
+                        id=dataset_id,
+                        name=dataset_row[1],
+                        description=dataset_row[2],
+                        created_at=datetime.fromisoformat(dataset_row[3]),
+                        updated_at=datetime.fromisoformat(dataset_row[4]),
+                        user_id=dataset_row[5],
+                        row_count=dataset_row[6],
+                        column_count=dataset_row[7],
+                        tags=json.loads(dataset_row[8]),
+                        is_public=bool(dataset_row[9])
+                    )
+                    
+                    # Obtener columnas
+                    await cursor.execute(
+                        """
+                        SELECT id, name, type, description
+                        FROM dataset_columns
+                        WHERE dataset_id = %s
+                        """,
+                        (str(dataset_id),)
+                    )
+                    
+                    column_rows = await cursor.fetchall()
+                    columns = []
+                    
+                    for column_row in column_rows:
+                        column = DatasetColumn(
+                            id=UUID(column_row[0]),
+                            name=column_row[1],
+                            type=column_row[2],
+                            description=column_row[3]
+                        )
+                        columns.append(column)
+                    
+                    dataset.columns = columns
+                    datasets.append(dataset)
                 
         return datasets
 

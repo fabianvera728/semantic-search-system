@@ -62,6 +62,11 @@ async def data_harvester_proxy(request: Request, path: str):
     """Proxy para el servicio de recolección de datos."""
     return await proxy_request(request, "data-harvester", path)
 
+@app.api_route("/api/data/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
+async def data_storage_proxy(request: Request, path: str):
+    """Proxy para el servicio de almacenamiento de datos."""
+    return await proxy_request(request, "data-storage", path)
+
 @app.api_route("/data-processor/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
 async def data_processor_proxy(request: Request, path: str):
     """Proxy para el servicio de procesamiento de datos."""

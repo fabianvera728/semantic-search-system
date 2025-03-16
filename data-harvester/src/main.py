@@ -13,6 +13,9 @@ from src.infrastructure.adapters.controllers import FastAPIController
 from src.infrastructure.adapters.harvesters import FileHarvesterAdapter, APIHarvesterAdapter, WebHarvesterAdapter
 from src.infrastructure.adapters.repositories import InMemoryHarvesterRepository
 from src.infrastructure.config import get_app_config
+from src.domain.services.data_source_service import DataSourceService
+from src.domain.services.harvester_service import HarvesterService
+from src.infrastructure.adapters.notifications import ConsoleNotificationAdapter
 
 
 def setup_logging(log_level: str, log_file: Optional[str] = None):
@@ -64,17 +67,35 @@ def create_app():
     api_harvester = APIHarvesterAdapter()
     web_harvester = WebHarvesterAdapter()
     
-    # Inicializar casos de uso
-    create_harvest_job_use_case = CreateHarvestJobUseCase(repository)
-    process_harvest_job_use_case = ProcessHarvestJobUseCase(
-        repository=repository,
+    # Inicializar adaptador de notificaciones
+    notifier = ConsoleNotificationAdapter()
+    
+    # Inicializar servicios del dominio
+    data_source_service = DataSourceService()
+    harvester_service = HarvesterService(
         file_harvester=file_harvester,
         api_harvester=api_harvester,
-        web_harvester=web_harvester
+        web_harvester=web_harvester,
+        repository=repository,
+        notifier=notifier
+    )
+    
+    # Inicializar casos de uso
+    create_harvest_job_use_case = CreateHarvestJobUseCase(
+        harvester_service=harvester_service,
+        data_source_service=data_source_service
+    )
+    process_harvest_job_use_case = ProcessHarvestJobUseCase(
+        harvester_service=harvester_service
     )
     get_job_status_use_case = GetJobStatusUseCase(repository)
-    get_available_sources_use_case = GetAvailableSourcesUseCase()
-    upload_file_use_case = UploadFileUseCase(repository)
+    get_available_sources_use_case = GetAvailableSourcesUseCase(
+        data_source_service=data_source_service
+    )
+    upload_file_use_case = UploadFileUseCase(
+        harvester_service=harvester_service,
+        upload_dir=config.upload_dir
+    )
     
     # Inicializar controlador
     controller = FastAPIController(

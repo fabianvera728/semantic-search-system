@@ -10,14 +10,23 @@ services:
     expose:
       - "8001"
     environment:
-      - AUTH_SERVICE_HOST=0.0.0.0
-      - AUTH_SERVICE_PORT=8001
-      - AUTH_SERVICE_JWT_SECRET=your-secret-key-change-in-production
-      - AUTH_SERVICE_JWT_ALGORITHM=HS256
-      - AUTH_SERVICE_ACCESS_TOKEN_EXPIRES_IN=3600
-      - AUTH_SERVICE_REFRESH_TOKEN_EXPIRES_IN=2592000
-      - AUTH_SERVICE_ALLOWED_ORIGINS=*
-      - AUTH_SERVICE_LOG_LEVEL=INFO
+      - HOST=0.0.0.0
+      - PORT=8001
+      - ALLOWED_ORIGINS=*
+      - LOG_LEVEL=INFO
+      - JWT_SECRET=your-secret-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRES_IN=3600
+      - REFRESH_TOKEN_EXPIRES_IN=2592000
+      # Configuración de MySQL
+      - USE_IN_MEMORY_DB=false
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=password
+      - DB_DATABASE=auth_service
+    depends_on:
+      - mysql
     networks:
       - semantic-search-network
     restart: unless-stopped
@@ -52,6 +61,11 @@ services:
     expose:
       - "8003"
     environment:
+      - DATA_STORAGE_HOST=0.0.0.0
+      - DATA_STORAGE_PORT=8003
+      - DATA_STORAGE_ALLOWED_ORIGINS=*
+      - DATA_STORAGE_LOG_LEVEL=INFO
+      - AUTH_SERVICE_URL=http://auth-service:8001
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - MYSQL_USER=root
@@ -73,11 +87,15 @@ services:
     environment:
       - MYSQL_ROOT_PASSWORD=password
       - MYSQL_DATABASE=data_storage
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
+      - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
       - semantic-search-network
     restart: unless-stopped
+    ports:
+      - "3306:3306"
 
   # Servicio de procesamiento de datos
   data-processor:
@@ -105,28 +123,28 @@ services:
       - data-processor-storage:/app/data
 
   # Servicio de embeddings
-  embedding-service:
-    build:
-      context: ./embedding-service
-      dockerfile: Dockerfile
-    container_name: embedding-service
-    expose:
-      - "8005"
-    environment:
-      - EMBEDDING_SERVICE_HOST=0.0.0.0
-      - EMBEDDING_SERVICE_PORT=8005
-      - AUTH_SERVICE_URL=http://auth-service:8001
-      - DATA_PROCESSOR_URL=http://data-processor:8004
-      - EMBEDDING_SERVICE_MODEL=all-MiniLM-L6-v2
-      - EMBEDDING_SERVICE_LOG_LEVEL=INFO
-    depends_on:
-      - auth-service
-      - data-processor
-    networks:
-      - semantic-search-network
-    restart: unless-stopped
-    volumes:
-      - embedding-service-storage:/app/data
+  # embedding-service:
+  #   build:
+  #     context: ./embedding-service
+  #     dockerfile: Dockerfile
+  #   container_name: embedding-service
+  #   expose:
+  #     - "8005"
+  #   environment:
+  #     - EMBEDDING_SERVICE_HOST=0.0.0.0
+  #     - EMBEDDING_SERVICE_PORT=8005
+  #     - AUTH_SERVICE_URL=http://auth-service:8001
+  #     - DATA_PROCESSOR_URL=http://data-processor:8004
+  #     - EMBEDDING_SERVICE_MODEL=all-MiniLM-L6-v2
+  #     - EMBEDDING_SERVICE_LOG_LEVEL=INFO
+  #   depends_on:
+  #     - auth-service
+  #     - data-processor
+  #   networks:
+  #     - semantic-search-network
+  #   restart: unless-stopped
+  #   volumes:
+  #     - embedding-service-storage:/app/data
 
   # Servicio de búsqueda
   search-service:
@@ -144,7 +162,7 @@ services:
       - SEARCH_SERVICE_LOG_LEVEL=INFO
     depends_on:
       - auth-service
-      - embedding-service
+      # - embedding-service
     networks:
       - semantic-search-network
     restart: unless-stopped
@@ -174,7 +192,7 @@ services:
       - data-harvester
       - data-storage
       - data-processor
-      - embedding-service
+      # - embedding-service
       - search-service
     networks:
       - semantic-search-network

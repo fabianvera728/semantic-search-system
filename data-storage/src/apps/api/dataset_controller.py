@@ -82,9 +82,7 @@ class AddColumnSchema(BaseModel):
     description: Optional[str] = None
 
 
-# Dependency for getting the current user ID (to be replaced with actual auth)
 async def get_current_user_id() -> str:
-    # This is a placeholder. In a real app, this would extract the user ID from a token
     return "test-user-id"
 
 

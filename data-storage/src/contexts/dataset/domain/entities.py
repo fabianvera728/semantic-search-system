@@ -6,26 +6,26 @@ from uuid import UUID, uuid4
 
 @dataclass
 class DatasetColumn:
-    id: UUID = field(default_factory=uuid4)
     name: str
     type: Literal["string", "number", "boolean", "date", "object"]
+    id: UUID = field(default_factory=uuid4)
     description: Optional[str] = None
 
 
 @dataclass
 class DatasetRow:
-    id: UUID = field(default_factory=uuid4)
     data: Dict[str, Any]
+    id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
 class Dataset:
-    id: UUID = field(default_factory=uuid4)
     name: str
     description: str
+    user_id: str
+    id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    user_id: str
     row_count: int = 0
     column_count: int = 0
     tags: List[str] = field(default_factory=list)

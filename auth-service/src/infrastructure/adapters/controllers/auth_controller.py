@@ -1,5 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Header
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 
@@ -8,7 +7,7 @@ from src.application.use_cases.login_use_case import LoginUseCase
 from src.application.use_cases.refresh_token_use_case import RefreshTokenUseCase
 from src.application.use_cases.logout_use_case import LogoutUseCase
 from src.application.use_cases.validate_token_use_case import ValidateTokenUseCase
-from src.infrastructure.config.app_config import get_app_config
+from src.domain.services.auth_service import AuthService
 
 
 class RegisterRequest(BaseModel):
@@ -30,9 +29,9 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
-class FastAPIController:
+class AuthController:
     """
-    Controlador que implementa la API REST utilizando FastAPI.
+    Controlador que implementa la API REST para autenticación.
     
     Este controlador expone los endpoints para interactuar con el servicio
     de autenticación.
@@ -61,38 +60,16 @@ class FastAPIController:
         self.refresh_token_use_case = refresh_token_use_case
         self.logout_use_case = logout_use_case
         self.validate_token_use_case = validate_token_use_case
+        self.auth_service = None  # Se asignará externamente
         
-        # Configuración de la aplicación
-        self.config = get_app_config()
-        
-        # Crear aplicación FastAPI
-        self.app = FastAPI(
-            title="Authentication Service",
-            description="Servicio de autenticación para el sistema de búsqueda semántica",
-            version="1.0.0"
-        )
-        
-        # Configurar CORS
-        self.app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"]
-        )
-        
-        # Registrar rutas
+        # Crear router
+        self.router = APIRouter(prefix="/auth", tags=["auth"])
         self._register_routes()
     
     def _register_routes(self):
         """Registra las rutas de la API."""
         
-        @self.app.get("/")
-        async def root():
-            """Endpoint raíz para verificar que el servicio está funcionando."""
-            return {"message": "Authentication Service is running"}
-        
-        @self.app.post("/register")
+        @self.router.post("/register")
         async def register(request: RegisterRequest):
             """
             Registra un nuevo usuario.
@@ -123,7 +100,7 @@ class FastAPIController:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
         
-        @self.app.post("/login")
+        @self.router.post("/login")
         async def login(request: LoginRequest):
             """
             Inicia sesión.
@@ -146,7 +123,7 @@ class FastAPIController:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
         
-        @self.app.post("/refresh")
+        @self.router.post("/refresh")
         async def refresh_token(request: RefreshTokenRequest):
             """
             Refresca un token.
@@ -168,7 +145,7 @@ class FastAPIController:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
         
-        @self.app.post("/logout")
+        @self.router.post("/logout")
         async def logout(authorization: Optional[str] = Header(None)):
             """
             Cierra sesión.
@@ -198,7 +175,7 @@ class FastAPIController:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
         
-        @self.app.get("/me")
+        @self.router.get("/me")
         async def get_current_user(authorization: Optional[str] = Header(None)):
             """
             Obtiene el usuario actual.
@@ -232,7 +209,7 @@ class FastAPIController:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
         
-        @self.app.get("/validate")
+        @self.router.get("/validate")
         async def validate_token(authorization: Optional[str] = Header(None)):
             """
             Valida un token.
@@ -257,13 +234,4 @@ class FastAPIController:
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
-    
-    def get_app(self) -> FastAPI:
-        """
-        Obtiene la aplicación FastAPI configurada.
-        
-        Returns:
-            La aplicación FastAPI
-        """
-        return self.app 
+                raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}") 

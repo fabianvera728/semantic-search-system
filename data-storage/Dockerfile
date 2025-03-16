@@ -29,10 +29,10 @@ ENV MYSQL_USER=root
 ENV MYSQL_PASSWORD=password
 ENV MYSQL_DATABASE=data_storage
 ENV HOST=0.0.0.0
-ENV PORT=8000
+ENV PORT=8003
 
-# Expose port
-EXPOSE 8000
+# Expose port   
+EXPOSE 8003
 
 # Run the application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"] 
