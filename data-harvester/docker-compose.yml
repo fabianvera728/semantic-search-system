@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  data-harvester:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DATA_HARVESTER_HOST=0.0.0.0
+      - DATA_HARVESTER_PORT=8000
+    restart: unless-stopped 

@@ -1,0 +1,167 @@
+version: '3.8'
+
+services:
+  # Servicio de autenticación
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    expose:
+      - "8001"
+    environment:
+      - AUTH_SERVICE_HOST=0.0.0.0
+      - AUTH_SERVICE_PORT=8001
+      - AUTH_SERVICE_JWT_SECRET=your-secret-key-change-in-production
+      - AUTH_SERVICE_JWT_ALGORITHM=HS256
+      - AUTH_SERVICE_ACCESS_TOKEN_EXPIRES_IN=3600
+      - AUTH_SERVICE_REFRESH_TOKEN_EXPIRES_IN=2592000
+      - AUTH_SERVICE_ALLOWED_ORIGINS=*
+      - AUTH_SERVICE_LOG_LEVEL=INFO
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+
+  # Servicio de recolección de datos
+  data-harvester:
+    build:
+      context: ./data-harvester
+      dockerfile: Dockerfile
+    container_name: data-harvester
+    expose:
+      - "8002"
+    environment:
+      - DATA_HARVESTER_HOST=0.0.0.0
+      - DATA_HARVESTER_PORT=8002
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - DATA_HARVESTER_LOG_LEVEL=INFO
+    depends_on:
+      - auth-service
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+    volumes:
+      - data-harvester-storage:/app/data
+
+  # Servicio de procesamiento de datos
+  data-processor:
+    build:
+      context: ./data-processor
+      dockerfile: Dockerfile
+    container_name: data-processor
+    expose:
+      - "8003"
+    environment:
+      - DATA_PROCESSOR_HOST=0.0.0.0
+      - DATA_PROCESSOR_PORT=8003
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - DATA_HARVESTER_URL=http://data-harvester:8002
+      - DATA_PROCESSOR_LOG_LEVEL=INFO
+    depends_on:
+      - auth-service
+      - data-harvester
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+    volumes:
+      - data-processor-storage:/app/data
+
+  # Servicio de embeddings
+  embedding-service:
+    build:
+      context: ./embedding-service
+      dockerfile: Dockerfile
+    container_name: embedding-service
+    expose:
+      - "8004"
+    environment:
+      - EMBEDDING_SERVICE_HOST=0.0.0.0
+      - EMBEDDING_SERVICE_PORT=8004
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - DATA_PROCESSOR_URL=http://data-processor:8003
+      - EMBEDDING_SERVICE_MODEL=all-MiniLM-L6-v2
+      - EMBEDDING_SERVICE_LOG_LEVEL=INFO
+    depends_on:
+      - auth-service
+      - data-processor
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+    volumes:
+      - embedding-service-storage:/app/data
+
+  # Servicio de búsqueda
+  search-service:
+    build:
+      context: ./search-service
+      dockerfile: Dockerfile
+    container_name: search-service
+    expose:
+      - "8005"
+    environment:
+      - SEARCH_SERVICE_HOST=0.0.0.0
+      - SEARCH_SERVICE_PORT=8005
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - EMBEDDING_SERVICE_URL=http://embedding-service:8004
+      - SEARCH_SERVICE_LOG_LEVEL=INFO
+    depends_on:
+      - auth-service
+      - embedding-service
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+    volumes:
+      - search-service-storage:/app/data
+
+  # API Gateway (Orquestador)
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - API_GATEWAY_HOST=0.0.0.0
+      - API_GATEWAY_PORT=8000
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - DATA_HARVESTER_URL=http://data-harvester:8002
+      - DATA_PROCESSOR_URL=http://data-processor:8003
+      - EMBEDDING_SERVICE_URL=http://embedding-service:8004
+      - SEARCH_SERVICE_URL=http://search-service:8005
+      - API_GATEWAY_LOG_LEVEL=INFO
+    depends_on:
+      - auth-service
+      - data-harvester
+      - data-processor
+      - embedding-service
+      - search-service
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3000:80"
+    environment:
+      - API_URL=http://localhost:8000
+    depends_on:
+      - orchestrator
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+
+networks:
+  semantic-search-network:
+    driver: bridge
+
+volumes:
+  data-harvester-storage:
+  data-processor-storage:
+  embedding-service-storage:
+  search-service-storage: 
