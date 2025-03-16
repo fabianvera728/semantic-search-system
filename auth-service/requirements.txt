@@ -5,4 +5,7 @@ python-dotenv==1.0.0
 bcrypt==4.0.1
 PyJWT==2.7.0
 python-multipart==0.0.6
-aiomysql==0.1.1 
+sqlalchemy==2.0.23
+asyncmy==0.2.8
+alembic==1.12.1
+cryptography==41.0.5 

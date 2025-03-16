@@ -26,17 +26,6 @@ class AuthService:
         access_token_expires_in: int = 3600,  # 1 hora
         refresh_token_expires_in: int = 2592000  # 30 días
     ):
-        """
-        Inicializa el servicio con los puertos necesarios.
-        
-        Args:
-            user_repository: Implementación del puerto para el repositorio de usuarios
-            token_repository: Implementación del puerto para el repositorio de tokens
-            jwt_secret: Clave secreta para firmar los tokens JWT
-            jwt_algorithm: Algoritmo para firmar los tokens JWT
-            access_token_expires_in: Tiempo de expiración del token de acceso en segundos
-            refresh_token_expires_in: Tiempo de expiración del token de refresco en segundos
-        """
         self.user_repository = user_repository
         self.token_repository = token_repository
         self.jwt_secret = jwt_secret
@@ -45,67 +34,38 @@ class AuthService:
         self.refresh_token_expires_in = refresh_token_expires_in
     
     async def register_user(self, name: str, email: str, password: str, roles: list[str] = None) -> User:
-        """
-        Registra un nuevo usuario en el sistema.
-        
-        Args:
-            name: Nombre del usuario
-            email: Correo electrónico
-            password: Contraseña en texto plano
-            roles: Lista de roles del usuario
-            
-        Returns:
-            El usuario registrado
-            
-        Raises:
-            ValueError: Si el nombre de usuario o correo ya están en uso
-        """
-        # Verificar si el nombre ya existe
-        existing_user = await self.user_repository.find_by_name(name)
-        if existing_user:
-            raise ValueError(f"El nombre '{name}' ya está en uso")
-        
-        # Verificar si el correo ya existe
         existing_user = await self.user_repository.find_by_email(email)
         if existing_user:
             raise ValueError(f"El correo '{email}' ya está en uso")
         
-        # Crear y guardar el usuario
         user = User.create(name, email, password, roles)
         saved_user = await self.user_repository.save(user)
         
         return saved_user
     
     async def authenticate(self, email_or_name: str, password: str) -> Tuple[User, Token]:
-        """
-        Autentica a un usuario y genera tokens de acceso y refresco.
-        
-        Args:
-            email_or_name: Correo electrónico o nombre del usuario
-            password: Contraseña en texto plano
-            
-        Returns:
-            Tupla con el usuario autenticado y el token generado
-            
-        Raises:
-            ValueError: Si las credenciales son inválidas
-        """
-        # Buscar usuario por nombre o correo
         user = await self.user_repository.find_by_name(email_or_name)
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+
         if not user:
             user = await self.user_repository.find_by_email(email_or_name)
+
+        logger.error(f"User: {user}")
         
-        # Verificar si el usuario existe y la contraseña es correcta
         if not user or not user.verify_password(password):
             raise ValueError("Credenciales inválidas")
         
-        # Verificar si el usuario está activo
         if not user.is_active:
             raise ValueError("Usuario inactivo")
         
         # Generar tokens
         access_token, refresh_token = self._generate_tokens(user)
-        
+        logger.error(f"Access token: {access_token}")
+        logger.error(f"Refresh token: {refresh_token}")
+
         # Crear y guardar el token
         token = Token.create(
             user_id=user.user_id,
@@ -114,7 +74,10 @@ class AuthService:
             access_token_expires_in=self.access_token_expires_in,
             refresh_token_expires_in=self.refresh_token_expires_in
         )
+
         saved_token = await self.token_repository.save(token)
+
+        logger.error(f"Saved token: {saved_token} emoji 🔑")
         
         # Actualizar último inicio de sesión
         user.record_login()

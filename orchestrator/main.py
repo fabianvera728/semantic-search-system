@@ -52,7 +52,7 @@ async def root():
         }
     }
 
-@app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
+@app.api_route("/api/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
 async def auth_proxy(request: Request, path: str):
     """Proxy para el servicio de autenticación."""
     return await proxy_request(request, "auth", path)

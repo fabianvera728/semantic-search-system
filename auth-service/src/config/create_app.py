@@ -11,10 +11,10 @@ from src.application.use_cases.logout_use_case import LogoutUseCase
 from src.application.use_cases.validate_token_use_case import ValidateTokenUseCase
 from src.infrastructure.adapters.repositories import (
     InMemoryUserRepository, InMemoryTokenRepository,
-    MySQLUserRepository, MySQLTokenRepository,
-    create_pool, init_db
+    SQLAlchemyUserRepository, SQLAlchemyTokenRepository
 )
 from src.infrastructure.adapters.controllers.auth_controller import AuthController
+from src.infrastructure.db.database import db
 
 
 def setup_logging(config):
@@ -68,10 +68,14 @@ def create_app(config: AppConfig) -> FastAPI:
     @app.on_event("startup")
     async def startup_db_client():
         # Crear repositorios
-        if not config.use_in_memory_db:
-            # Crear pool de conexiones
-            logging.info(f"Creando pool de conexiones a MySQL en {config.mysql_host}:{config.mysql_port}")
-            app.db_pool = await create_pool(
+        if config.use_in_memory_db:
+            # Crear repositorios en memoria
+            logging.info("Creando repositorios en memoria...")
+            user_repository = InMemoryUserRepository()
+            token_repository = InMemoryTokenRepository()
+        else:
+            logging.info(f"Conectando a la base de datos MySQL en {config.mysql_host}:{config.mysql_port}")
+            await db.connect(
                 host=config.mysql_host,
                 port=config.mysql_port,
                 user=config.mysql_user,
@@ -79,21 +83,13 @@ def create_app(config: AppConfig) -> FastAPI:
                 database=config.mysql_database
             )
             
-            # Inicializar base de datos
-            logging.info("Inicializando base de datos...")
-            await init_db(app.db_pool)
+            logging.info("Creando tablas en la base de datos...")
+            await db.create_tables()
             
-            # Crear repositorios MySQL
-            logging.info("Creando repositorios MySQL...")
-            user_repository = MySQLUserRepository(app.db_pool)
-            token_repository = MySQLTokenRepository(app.db_pool)
-        else:
-            # Crear repositorios en memoria
-            logging.info("Creando repositorios en memoria...")
-            user_repository = InMemoryUserRepository()
-            token_repository = InMemoryTokenRepository()
+            logging.info("Creando repositorios SQLAlchemy...")
+            user_repository = SQLAlchemyUserRepository()
+            token_repository = SQLAlchemyTokenRepository()
         
-        # Crear servicio de autenticación
         auth_service = AuthService(
             user_repository=user_repository,
             token_repository=token_repository,
@@ -103,38 +99,31 @@ def create_app(config: AppConfig) -> FastAPI:
             refresh_token_expires_in=config.refresh_token_expires_in
         )
         
-        # Crear casos de uso
         register_user_use_case = RegisterUserUseCase(auth_service)
         login_use_case = LoginUseCase(auth_service)
         refresh_token_use_case = RefreshTokenUseCase(auth_service)
         logout_use_case = LogoutUseCase(auth_service)
         validate_token_use_case = ValidateTokenUseCase(auth_service)
         
-        # Crear controlador
         auth_controller = AuthController(
             register_user_use_case=register_user_use_case,
             login_use_case=login_use_case,
             refresh_token_use_case=refresh_token_use_case,
             logout_use_case=logout_use_case,
-            validate_token_use_case=validate_token_use_case
+            validate_token_use_case=validate_token_use_case,
+            auth_service=auth_service
         )
         
-        # Asignar el servicio de autenticación al controlador para el endpoint /auth/me
         auth_controller.auth_service = auth_service
-        
-        # Incluir router
+
         app.include_router(auth_controller.router)
     
-    # Evento de cierre
     @app.on_event("shutdown")
     async def shutdown_db_client():
-        if not config.use_in_memory_db and hasattr(app, "db_pool"):
-            # Cerrar pool de conexiones
-            logging.info("Cerrando pool de conexiones a MySQL...")
-            app.db_pool.close()
-            await app.db_pool.wait_closed()
+        if not config.use_in_memory_db:
+            logging.info("Cerrando conexión a la base de datos MySQL...")
+            await db.close()
     
-    # Endpoints básicos
     @app.get("/")
     async def root():
         """Endpoint raíz para verificar que el servicio está funcionando."""
