@@ -43,6 +43,42 @@ services:
     volumes:
       - data-harvester-storage:/app/data
 
+  # Servicio de almacenamiento de datos
+  data-storage:
+    build:
+      context: ./data-storage
+      dockerfile: Dockerfile
+    container_name: data-storage
+    expose:
+      - "8003"
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=data_storage
+      - CORS_ORIGINS=*
+      - HOST=0.0.0.0
+      - PORT=8003
+    depends_on:
+      - mysql
+      - auth-service
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=data_storage
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+
   # Servicio de procesamiento de datos
   data-processor:
     build:
@@ -50,16 +86,18 @@ services:
       dockerfile: Dockerfile
     container_name: data-processor
     expose:
-      - "8003"
+      - "8004"
     environment:
       - DATA_PROCESSOR_HOST=0.0.0.0
-      - DATA_PROCESSOR_PORT=8003
+      - DATA_PROCESSOR_PORT=8004
       - AUTH_SERVICE_URL=http://auth-service:8001
       - DATA_HARVESTER_URL=http://data-harvester:8002
+      - DATA_STORAGE_URL=http://data-storage:8003
       - DATA_PROCESSOR_LOG_LEVEL=INFO
     depends_on:
       - auth-service
       - data-harvester
+      - data-storage
     networks:
       - semantic-search-network
     restart: unless-stopped
@@ -73,12 +111,12 @@ services:
       dockerfile: Dockerfile
     container_name: embedding-service
     expose:
-      - "8004"
+      - "8005"
     environment:
       - EMBEDDING_SERVICE_HOST=0.0.0.0
-      - EMBEDDING_SERVICE_PORT=8004
+      - EMBEDDING_SERVICE_PORT=8005
       - AUTH_SERVICE_URL=http://auth-service:8001
-      - DATA_PROCESSOR_URL=http://data-processor:8003
+      - DATA_PROCESSOR_URL=http://data-processor:8004
       - EMBEDDING_SERVICE_MODEL=all-MiniLM-L6-v2
       - EMBEDDING_SERVICE_LOG_LEVEL=INFO
     depends_on:
@@ -97,12 +135,12 @@ services:
       dockerfile: Dockerfile
     container_name: search-service
     expose:
-      - "8005"
+      - "8006"
     environment:
       - SEARCH_SERVICE_HOST=0.0.0.0
-      - SEARCH_SERVICE_PORT=8005
+      - SEARCH_SERVICE_PORT=8006
       - AUTH_SERVICE_URL=http://auth-service:8001
-      - EMBEDDING_SERVICE_URL=http://embedding-service:8004
+      - EMBEDDING_SERVICE_URL=http://embedding-service:8005
       - SEARCH_SERVICE_LOG_LEVEL=INFO
     depends_on:
       - auth-service
@@ -126,13 +164,15 @@ services:
       - API_GATEWAY_PORT=8000
       - AUTH_SERVICE_URL=http://auth-service:8001
       - DATA_HARVESTER_URL=http://data-harvester:8002
-      - DATA_PROCESSOR_URL=http://data-processor:8003
-      - EMBEDDING_SERVICE_URL=http://embedding-service:8004
-      - SEARCH_SERVICE_URL=http://search-service:8005
+      - DATA_STORAGE_URL=http://data-storage:8003
+      - DATA_PROCESSOR_URL=http://data-processor:8004
+      - EMBEDDING_SERVICE_URL=http://embedding-service:8005
+      - SEARCH_SERVICE_URL=http://search-service:8006
       - API_GATEWAY_LOG_LEVEL=INFO
     depends_on:
       - auth-service
       - data-harvester
+      - data-storage
       - data-processor
       - embedding-service
       - search-service
@@ -140,21 +180,6 @@ services:
       - semantic-search-network
     restart: unless-stopped
 
-  # Frontend
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: frontend
-    ports:
-      - "3000:80"
-    environment:
-      - API_URL=http://localhost:8000
-    depends_on:
-      - orchestrator
-    networks:
-      - semantic-search-network
-    restart: unless-stopped
 
 networks:
   semantic-search-network:
@@ -164,4 +189,5 @@ volumes:
   data-harvester-storage:
   data-processor-storage:
   embedding-service-storage:
-  search-service-storage: 
+  search-service-storage:
+  mysql-data: 

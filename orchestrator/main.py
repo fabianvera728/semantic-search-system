@@ -6,21 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.background import BackgroundTask
 import uvicorn
 
-# Configuración de logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("api-gateway")
 
-# Crear aplicación FastAPI
 app = FastAPI(
     title="API Gateway",
     description="API Gateway para el sistema de búsqueda semántica",
     version="1.0.0"
 )
 
-# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,16 +26,15 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# URLs de los servicios
 SERVICE_URLS = {
     "auth": os.getenv("AUTH_SERVICE_URL", "http://auth-service:8001"),
     "data-harvester": os.getenv("DATA_HARVESTER_URL", "http://data-harvester:8002"),
-    "data-processor": os.getenv("DATA_PROCESSOR_URL", "http://data-processor:8003"),
-    "embedding-service": os.getenv("EMBEDDING_SERVICE_URL", "http://embedding-service:8004"),
-    "search-service": os.getenv("SEARCH_SERVICE_URL", "http://search-service:8005")
+    "data-storage": os.getenv("DATA_STORAGE_URL", "http://data-storage:8003"),
+    "data-processor": os.getenv("DATA_PROCESSOR_URL", "http://data-processor:8004"),
+    "embedding-service": os.getenv("EMBEDDING_SERVICE_URL", "http://embedding-service:8005"),
+    "search-service": os.getenv("SEARCH_SERVICE_URL", "http://search-service:8006")
 }
 
-# Cliente HTTP asíncrono
 http_client = httpx.AsyncClient()
 
 @app.on_event("shutdown")
@@ -96,24 +92,17 @@ async def proxy_request(request: Request, service: str, path: str):
     if service not in SERVICE_URLS:
         raise HTTPException(status_code=404, detail=f"Servicio '{service}' no encontrado")
     
-    # Construir URL de destino
     target_url = f"{SERVICE_URLS[service]}/{path}"
     
-    # Obtener método HTTP
     method = request.method
     
-    # Obtener headers
     headers = dict(request.headers)
-    headers.pop("host", None)  # Eliminar header host
+    headers.pop("host", None) 
     
-    # Obtener parámetros de consulta
     params = dict(request.query_params)
-    
-    # Obtener cuerpo de la solicitud
     body = await request.body()
     
     try:
-        # Enviar solicitud al servicio
         response = await http_client.request(
             method=method,
             url=target_url,
@@ -123,7 +112,6 @@ async def proxy_request(request: Request, service: str, path: str):
             timeout=30.0
         )
         
-        # Crear respuesta
         return Response(
             content=response.content,
             status_code=response.status_code,
@@ -135,11 +123,9 @@ async def proxy_request(request: Request, service: str, path: str):
         raise HTTPException(status_code=503, detail=f"Error al comunicarse con el servicio: {str(e)}")
 
 if __name__ == "__main__":
-    # Obtener configuración
     host = os.getenv("API_GATEWAY_HOST", "0.0.0.0")
     port = int(os.getenv("API_GATEWAY_PORT", "8000"))
     
-    # Iniciar servidor
     uvicorn.run(
         "main:app",
         host=host,

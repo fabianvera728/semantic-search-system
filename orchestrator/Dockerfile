@@ -24,9 +24,10 @@ ENV API_GATEWAY_HOST=0.0.0.0
 ENV API_GATEWAY_PORT=8000
 ENV AUTH_SERVICE_URL=http://auth-service:8001
 ENV DATA_HARVESTER_URL=http://data-harvester:8002
-ENV DATA_PROCESSOR_URL=http://data-processor:8003
-ENV EMBEDDING_SERVICE_URL=http://embedding-service:8004
-ENV SEARCH_SERVICE_URL=http://search-service:8005
+ENV DATA_STORAGE_URL=http://data-storage:8003
+ENV DATA_PROCESSOR_URL=http://data-processor:8004
+ENV EMBEDDING_SERVICE_URL=http://embedding-service:8005
+ENV SEARCH_SERVICE_URL=http://search-service:8006
 
 # Comando para iniciar la aplicación
 CMD ["python", "main.py"] 
