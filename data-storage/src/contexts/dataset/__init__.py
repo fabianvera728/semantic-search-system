@@ -16,7 +16,7 @@ from .domain import (
     AddColumnRequest
 )
 from .application import DatasetService
-from .infrastructure import MySQLDatasetRepository, InMemoryDatasetRepository
+from .infrastructure import InMemoryDatasetRepository
 
 __all__ = [
     'Dataset',
@@ -35,6 +35,5 @@ __all__ = [
     'AddRowRequest',
     'AddColumnRequest',
     'DatasetService',
-    'MySQLDatasetRepository',
     'InMemoryDatasetRepository'
 ] 

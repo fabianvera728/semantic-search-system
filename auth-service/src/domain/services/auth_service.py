@@ -10,12 +10,6 @@ from src.domain.ports.token_repository_port import TokenRepositoryPort
 
 
 class AuthService:
-    """
-    Servicio del dominio que implementa la lógica de negocio para la autenticación.
-    
-    Este servicio coordina el proceso de autenticación, generación de tokens
-    y verificación de credenciales.
-    """
     
     def __init__(
         self,
@@ -61,12 +55,10 @@ class AuthService:
         if not user.is_active:
             raise ValueError("Usuario inactivo")
         
-        # Generar tokens
         access_token, refresh_token = self._generate_tokens(user)
         logger.error(f"Access token: {access_token}")
         logger.error(f"Refresh token: {refresh_token}")
 
-        # Crear y guardar el token
         token = Token.create(
             user_id=user.user_id,
             access_token=access_token,
@@ -79,52 +71,32 @@ class AuthService:
 
         logger.error(f"Saved token: {saved_token} emoji 🔑")
         
-        # Actualizar último inicio de sesión
         user.record_login()
         await self.user_repository.update(user)
         
         return user, saved_token
     
     async def refresh_token(self, refresh_token: str) -> Token:
-        """
-        Refresca un token de acceso utilizando un token de refresco.
-        
-        Args:
-            refresh_token: Token de refresco
-            
-        Returns:
-            El nuevo token generado
-            
-        Raises:
-            ValueError: Si el token de refresco es inválido o ha expirado
-        """
-        # Buscar token por token de refresco
         token = await self.token_repository.find_by_refresh_token(refresh_token)
         if not token:
             raise ValueError("Token de refresco inválido")
         
-        # Verificar si el token está revocado
         if token.is_revoked:
             raise ValueError("Token revocado")
         
-        # Verificar si el token de refresco ha expirado
         if token.is_refresh_token_expired():
             raise ValueError("Token de refresco expirado")
         
-        # Buscar usuario
         user = await self.user_repository.find_by_id(token.user_id)
         if not user:
             raise ValueError("Usuario no encontrado")
         
-        # Verificar si el usuario está activo
         if not user.is_active:
             raise ValueError("Usuario inactivo")
         
-        # Revocar token actual
         token.revoke()
         await self.token_repository.update(token)
         
-        # Generar nuevos tokens
         access_token, refresh_token = self._generate_tokens(user)
         
         # Crear y guardar el nuevo token
@@ -140,16 +112,6 @@ class AuthService:
         return saved_token
     
     async def validate_token(self, access_token: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
-        """
-        Valida un token de acceso.
-        
-        Args:
-            access_token: Token de acceso a validar
-            
-        Returns:
-            Tupla con un booleano indicando si el token es válido y los datos del token
-        """
-        # Buscar token por token de acceso
         token = await self.token_repository.find_by_access_token(access_token)
         if not token:
             return False, None
@@ -175,46 +137,19 @@ class AuthService:
             return False, None
     
     async def logout(self, access_token: str) -> bool:
-        """
-        Cierra la sesión de un usuario revocando su token.
-        
-        Args:
-            access_token: Token de acceso a revocar
-            
-        Returns:
-            True si se revocó el token, False en caso contrario
-        """
-        # Buscar token por token de acceso
         token = await self.token_repository.find_by_access_token(access_token)
         if not token:
             return False
         
-        # Revocar token
         token.revoke()
         await self.token_repository.update(token)
         
         return True
     
     async def logout_all(self, user_id: str) -> None:
-        """
-        Cierra todas las sesiones de un usuario revocando todos sus tokens.
-        
-        Args:
-            user_id: ID del usuario
-        """
-        # Eliminar todos los tokens del usuario
         await self.token_repository.delete_by_user_id(user_id)
     
     async def get_current_user(self, access_token: str) -> Optional[User]:
-        """
-        Obtiene el usuario actual a partir de un token de acceso.
-        
-        Args:
-            access_token: Token de acceso
-            
-        Returns:
-            El usuario actual o None si el token es inválido
-        """
         is_valid, payload = await self.validate_token(access_token)
         
         if not is_valid or not payload:
@@ -227,16 +162,6 @@ class AuthService:
         return await self.user_repository.find_by_id(user_id)
     
     def _generate_tokens(self, user: User) -> Tuple[str, str]:
-        """
-        Genera tokens de acceso y refresco para un usuario.
-        
-        Args:
-            user: Usuario para el que se generan los tokens
-            
-        Returns:
-            Tupla con el token de acceso y el token de refresco
-        """
-        # Generar payload para el token de acceso
         access_payload = {
             "sub": user.user_id,
             "name": user.name,
@@ -245,14 +170,12 @@ class AuthService:
             "exp": datetime.utcnow() + timedelta(seconds=self.access_token_expires_in)
         }
         
-        # Generar token de acceso
         access_token = jwt.encode(
             access_payload,
             self.jwt_secret,
             algorithm=self.jwt_algorithm
         )
         
-        # Generar token de refresco aleatorio
         refresh_token = secrets.token_urlsafe(64)
         
         return access_token, refresh_token 

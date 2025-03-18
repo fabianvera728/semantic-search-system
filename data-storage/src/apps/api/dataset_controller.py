@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Request
 from pydantic import BaseModel, Field
 
 from ...contexts.dataset.application import DatasetService
@@ -11,9 +11,9 @@ from ...contexts.dataset.domain.value_objects import (
     AddRowRequest,
     AddColumnRequest
 )
+from ...middleware import get_current_user_id
 
 
-# Pydantic models for API requests and responses
 class DatasetColumnSchema(BaseModel):
     id: str
     name: str
@@ -80,10 +80,6 @@ class AddColumnSchema(BaseModel):
     name: str
     type: str
     description: Optional[str] = None
-
-
-async def get_current_user_id() -> str:
-    return "test-user-id"
 
 
 class DatasetController:

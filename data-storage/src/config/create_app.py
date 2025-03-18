@@ -1,11 +1,12 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .app_config import get_app_config, AppConfig
+from .app_config import AppConfig
 from src.apps.api import DatasetController
 from src.contexts.dataset.application import DatasetService 
-from src.contexts.dataset.infrastructure import MySQLDatasetRepository, InMemoryDatasetRepository
-from src.infrastructure.db import init_db_pool, create_tables, close_db_pool
+from src.contexts.dataset.infrastructure import SQLAlchemyDatasetRepository, InMemoryDatasetRepository
+from src.infrastructure.db import db
+from src.middleware import JWTAuthMiddleware
 
 def setup_logging(config):
     log_level = getattr(logging, config.log_level)
@@ -41,20 +42,28 @@ def create_app(config: AppConfig) -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(JWTAuthMiddleware)
+
     @app.on_event("startup")
     async def startup_db_client():
         if not config.use_in_memory_db:
-            app.db_pool = await init_db_pool(
+            await db.connect(
                 host=config.mysql_host,
                 port=config.mysql_port,
                 user=config.mysql_user,
                 password=config.mysql_password,
-                db=config.mysql_database
+                database=config.mysql_database,
+                echo=False,
+                pool_size=5,
+                max_overflow=10,
+                pool_recycle=3600,
+                pool_pre_ping=True,
+                use_connection_pool=True
             )
             
-            await create_tables(app.db_pool)
+            await db.create_tables()
             
-            dataset_repository = MySQLDatasetRepository(app.db_pool)
+            dataset_repository = SQLAlchemyDatasetRepository()
         else:
             dataset_repository = InMemoryDatasetRepository()
         
@@ -66,8 +75,8 @@ def create_app(config: AppConfig) -> FastAPI:
     # Shutdown event
     @app.on_event("shutdown")
     async def shutdown_db_client():
-        if not config.use_in_memory_db and hasattr(app, "db_pool"):
-            await close_db_pool(app.db_pool)
+        if not config.use_in_memory_db:
+            await db.close()
     
     return app
     

@@ -74,6 +74,9 @@ services:
       - CORS_ORIGINS=*
       - HOST=0.0.0.0
       - PORT=8003
+      # Variables JWT compartidas con auth-service
+      - AUTH_SERVICE_JWT_SECRET=your-secret-key-change-in-production
+      - AUTH_SERVICE_JWT_ALGORITHM=HS256
     depends_on:
       - mysql
       - auth-service

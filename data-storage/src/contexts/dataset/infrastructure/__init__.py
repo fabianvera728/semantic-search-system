@@ -1,4 +1,4 @@
-from .mysql_repository import MySQLDatasetRepository
 from .memory_repository import InMemoryDatasetRepository
+from .sqlalchemy_repository import SQLAlchemyDatasetRepository
 
-__all__ = ['MongoDatasetRepository', 'MySQLDatasetRepository', 'InMemoryDatasetRepository'] 
+__all__ = ['InMemoryDatasetRepository', 'SQLAlchemyDatasetRepository'] 

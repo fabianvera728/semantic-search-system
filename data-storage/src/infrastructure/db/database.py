@@ -137,7 +137,9 @@ class Database:
         
         logger.info("Tablas creadas exitosamente")
     
-    async def get_session(self) -> AsyncSession:
+    def get_session(self) -> AsyncSession:
+        if self.async_session_factory is None:
+            raise RuntimeError("La base de datos no está conectada. Llame a connect() primero.")
         return self.async_session_factory()
     
     async def close(self):

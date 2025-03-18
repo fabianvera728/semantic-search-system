@@ -95,7 +95,13 @@ class DatasetService:
 
     async def list_datasets(self, limit: int = 100, offset: int = 0) -> List[Dataset]:
         """List all datasets with pagination"""
-        return await self.repository.find_all(limit, offset)
+        try:
+            return await self.repository.find_all(limit, offset)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al listar datasets: {e}")
+            raise e
 
     async def list_user_datasets(self, user_id: str, limit: int = 100, offset: int = 0) -> List[Dataset]:
         """List all datasets for a specific user"""

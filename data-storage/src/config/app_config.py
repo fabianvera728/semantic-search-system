@@ -17,6 +17,10 @@ class AppConfig:
     mysql_database: str
     use_in_memory_db: bool
 
+    # Configuración de JWT
+    jwt_secret: str
+    jwt_algorithm: str
+
     log_level: str
     log_file: Optional[str]
 
@@ -33,6 +37,11 @@ def get_app_config() -> AppConfig:
     mysql_password = os.getenv("MYSQL_PASSWORD", "password")
     mysql_database = os.getenv("MYSQL_DATABASE", "data_storage")
     use_in_memory_db = os.getenv("USE_IN_MEMORY_DB", "false").lower() == "true"
+    
+    # Configuración de JWT
+    jwt_secret = os.getenv("AUTH_SERVICE_JWT_SECRET", "your-secret-key")
+    jwt_algorithm = os.getenv("AUTH_SERVICE_JWT_ALGORITHM", "HS256")
+    
     log_level = os.getenv("DATA_STORAGE_LOG_LEVEL", "INFO")
     log_file = os.getenv("DATA_STORAGE_LOG_FILE")
     
@@ -46,6 +55,8 @@ def get_app_config() -> AppConfig:
         mysql_password=mysql_password,
         mysql_database=mysql_database,
         use_in_memory_db=use_in_memory_db,
+        jwt_secret=jwt_secret,
+        jwt_algorithm=jwt_algorithm,
         log_level=log_level,
         log_file=log_file
     ) 

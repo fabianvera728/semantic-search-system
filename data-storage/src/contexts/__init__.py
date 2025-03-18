@@ -4,7 +4,6 @@ from .dataset import (
     DatasetRow,
     DatasetRepository,
     DatasetService,
-    MySQLDatasetRepository,
     InMemoryDatasetRepository
 )
 
@@ -14,6 +13,5 @@ __all__ = [
     'DatasetRow',
     'DatasetRepository',
     'DatasetService',
-    'MySQLDatasetRepository',
     'InMemoryDatasetRepository'
 ] 
