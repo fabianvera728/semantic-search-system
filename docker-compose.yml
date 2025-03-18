@@ -29,6 +29,11 @@ services:
       - mysql
     networks:
       - semantic-search-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # Servicio de recolección de datos
@@ -52,7 +57,6 @@ services:
     volumes:
       - data-harvester-storage:/app/data
 
-  # Servicio de almacenamiento de datos
   data-storage:
     build:
       context: ./data-storage
@@ -64,22 +68,25 @@ services:
       - DATA_STORAGE_HOST=0.0.0.0
       - DATA_STORAGE_PORT=8003
       - DATA_STORAGE_ALLOWED_ORIGINS=*
-      - DATA_STORAGE_LOG_LEVEL=INFO
+      - DATA_STORAGE_LOG_LEVEL=DEBUG
       - AUTH_SERVICE_URL=http://auth-service:8001
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - MYSQL_USER=root
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=data_storage
-      - CORS_ORIGINS=*
-      - HOST=0.0.0.0
-      - PORT=8003
-      # Variables JWT compartidas con auth-service
+      - ENABLE_EVENT_PUBLISHING=true
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_EXCHANGE=semantic_search_events
       - AUTH_SERVICE_JWT_SECRET=your-secret-key-change-in-production
       - AUTH_SERVICE_JWT_ALGORITHM=HS256
     depends_on:
-      - mysql
-      - auth-service
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_started
+      auth-service:
+        condition: service_started
     networks:
       - semantic-search-network
     restart: unless-stopped
@@ -102,10 +109,35 @@ services:
     networks:
       - semantic-search-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports:
       - "3306:3306"
 
-  # Servicio de procesamiento de datos
+  # RabbitMQ para mensajería entre servicios
+  rabbitmq:
+    image: rabbitmq:4.0.7-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # Puerto AMQP
+      - "15672:15672" # Puerto interfaz de administración
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   data-processor:
     build:
       context: ./data-processor
@@ -130,29 +162,61 @@ services:
     volumes:
       - data-processor-storage:/app/data
 
+  chromadb:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromadb
+    volumes:
+      - chromadb-data:/chroma/chroma
+    expose:
+      - "8000"
+    environment:
+      - ALLOW_RESET=True
+      - ANONYMIZED_TELEMETRY=False
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_PORT=8000
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+
   # Servicio de embeddings
-  # embedding-service:
-  #   build:
-  #     context: ./embedding-service
-  #     dockerfile: Dockerfile
-  #   container_name: embedding-service
-  #   expose:
-  #     - "8005"
-  #   environment:
-  #     - EMBEDDING_SERVICE_HOST=0.0.0.0
-  #     - EMBEDDING_SERVICE_PORT=8005
-  #     - AUTH_SERVICE_URL=http://auth-service:8001
-  #     - DATA_PROCESSOR_URL=http://data-processor:8004
-  #     - EMBEDDING_SERVICE_MODEL=all-MiniLM-L6-v2
-  #     - EMBEDDING_SERVICE_LOG_LEVEL=INFO
-  #   depends_on:
-  #     - auth-service
-  #     - data-processor
-  #   networks:
-  #     - semantic-search-network
-  #   restart: unless-stopped
-  #   volumes:
-  #     - embedding-service-storage:/app/data
+  embedding-service:
+    build:
+      context: ./embedding-service
+      dockerfile: Dockerfile
+    container_name: embedding-service
+    expose:
+      - "8005"
+    environment:
+      - EMBEDDING_SERVICE_HOST=0.0.0.0
+      - EMBEDDING_SERVICE_PORT=8005
+      - EMBEDDING_SERVICE_ALLOWED_ORIGINS=*
+      - EMBEDDING_SERVICE_LOG_LEVEL=INFO
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - DATA_STORAGE_URL=http://data-storage:8003
+      - EMBEDDING_SERVICE_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - VECTOR_DB_TYPE=chromadb
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - CHROMADB_PERSISTENCE_PATH=/app/storage/chroma
+      - CACHE_ENABLED=true
+      - CACHE_TTL=3600
+      - BATCH_SIZE=32
+      - REQUEST_TIMEOUT=60
+      - EVENT_CONSUMER_ENABLED=true
+      - EVENT_CONSUMER_TYPE=rabbitmq
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_EXCHANGE=semantic_search_events
+      - RABBITMQ_QUEUE=embedding_service_events
+    depends_on:
+      - auth-service
+      - data-storage
+      - chromadb
+      - rabbitmq
+    networks:
+      - semantic-search-network
+    restart: unless-stopped
+    volumes:
+      - embedding-service-storage:/app/storage
 
   # Servicio de búsqueda
   search-service:
@@ -170,7 +234,7 @@ services:
       - SEARCH_SERVICE_LOG_LEVEL=INFO
     depends_on:
       - auth-service
-      # - embedding-service
+      - embedding-service
     networks:
       - semantic-search-network
     restart: unless-stopped
@@ -200,7 +264,7 @@ services:
       - data-harvester
       - data-storage
       - data-processor
-      # - embedding-service
+      - embedding-service
       - search-service
     networks:
       - semantic-search-network
@@ -216,4 +280,6 @@ volumes:
   data-processor-storage:
   embedding-service-storage:
   search-service-storage:
-  mysql-data: 
+  mysql-data:
+  chromadb-data:
+  rabbitmq-data: 
