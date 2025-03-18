@@ -127,15 +127,39 @@ class Database:
         """Crea las tablas en la base de datos."""
         logger.info("Creando tablas en la base de datos")
         
-        async with self.engine.begin() as conn:
-            # Primero eliminar las tablas existentes para aplicar cambios en el esquema
-            # logger.info("Eliminando tablas existentes para aplicar cambios en el esquema")
-            # await conn.run_sync(Base.metadata.drop_all)
+        try:
+            # Verificar si las tablas ya existen
+            async with self.engine.connect() as conn:
+                result = await conn.execute(text("SHOW TABLES"))
+                tables = [row[0] for row in result.fetchall()]
+                logger.info(f"Tablas existentes: {tables}")
             
-            logger.info("Creando tablas con el esquema actualizado")
-            await conn.run_sync(Base.metadata.create_all)
-        
-        logger.info("Tablas creadas exitosamente")
+            # Crear las tablas
+            async with self.engine.begin() as conn:
+                # Si las tablas ya existen y queremos forzar la recreación,
+                # descomenta estas líneas para eliminar las tablas existentes
+                # logger.info("Eliminando tablas existentes para aplicar cambios en el esquema")
+                # await conn.run_sync(Base.metadata.drop_all)
+                
+                logger.info("Creando tablas con el esquema actualizado")
+                await conn.run_sync(Base.metadata.create_all)
+                
+                # Verificar que las tablas se crearon correctamente
+                result = await conn.execute(text("SHOW TABLES"))
+                tables = [row[0] for row in result.fetchall()]
+                logger.info(f"Tablas después de create_all: {tables}")
+                
+                # Verificar estructura de las tablas
+                for table in tables:
+                    result = await conn.execute(text(f"DESCRIBE {table}"))
+                    columns = result.fetchall()
+                    logger.info(f"Estructura de tabla {table}: {columns}")
+            
+            logger.info("Tablas creadas exitosamente")
+        except Exception as e:
+            logger.error(f"Error al crear tablas: {e}")
+            logger.exception(e)
+            raise
     
     def get_session(self) -> AsyncSession:
         if self.async_session_factory is None:

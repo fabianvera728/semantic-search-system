@@ -1,38 +1,31 @@
-FROM python:3.10-slim
+# Base Python image
+FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
-    default-libmysqlclient-dev \
-    pkg-config \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install dependencies
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Create required directories
+RUN mkdir -p /app/storage/logs
 
 # Copy application code
 COPY . .
 
-# Create data directory
-RUN mkdir -p /data
+# Expose port
+EXPOSE 8003
 
 # Set environment variables
-ENV PYTHONPATH=/app
-ENV MYSQL_HOST=mysql
-ENV MYSQL_PORT=3306
-ENV MYSQL_USER=root
-ENV MYSQL_PASSWORD=password
-ENV MYSQL_DATABASE=data_storage
-ENV HOST=0.0.0.0
-ENV PORT=8003
-
-# Expose port   
-EXPOSE 8003
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 
 # Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"] 

@@ -1,17 +1,8 @@
-from .dataset import (
-    Dataset,
-    DatasetColumn,
-    DatasetRow,
-    DatasetRepository,
-    DatasetService,
-    InMemoryDatasetRepository
-)
+"""
+Módulo de contextos bounded que contiene la lógica de dominio.
+Se recomienda importar los componentes directamente desde sus módulos
+para evitar ciclos de importación.
+"""
 
-__all__ = [
-    'Dataset',
-    'DatasetColumn',
-    'DatasetRow',
-    'DatasetRepository',
-    'DatasetService',
-    'InMemoryDatasetRepository'
-] 
+# No exportamos nada por defecto
+__all__ = [] 

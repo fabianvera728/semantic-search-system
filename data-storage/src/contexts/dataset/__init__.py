@@ -1,39 +1,8 @@
-from .domain import (
-    Dataset, 
-    DatasetColumn, 
-    DatasetRow,
-    DatasetRepository,
-    DatasetException,
-    DatasetNotFoundError,
-    DatasetValidationError,
-    UnauthorizedAccessError,
-    ColumnNotFoundError,
-    DatasetId,
-    UserId,
-    CreateDatasetRequest,
-    UpdateDatasetRequest,
-    AddRowRequest,
-    AddColumnRequest
-)
-from .application import DatasetService
-from .infrastructure import InMemoryDatasetRepository
+"""
+Bounded context del dataset.
+Se recomienda importar los componentes directamente desde sus módulos
+para evitar ciclos de importación.
+"""
 
-__all__ = [
-    'Dataset',
-    'DatasetColumn',
-    'DatasetRow',
-    'DatasetRepository',
-    'DatasetException',
-    'DatasetNotFoundError',
-    'DatasetValidationError',
-    'UnauthorizedAccessError',
-    'ColumnNotFoundError',
-    'DatasetId',
-    'UserId',
-    'CreateDatasetRequest',
-    'UpdateDatasetRequest',
-    'AddRowRequest',
-    'AddColumnRequest',
-    'DatasetService',
-    'InMemoryDatasetRepository'
-] 
+# No exportamos nada directamente para evitar ciclos de importación
+__all__ = [] 

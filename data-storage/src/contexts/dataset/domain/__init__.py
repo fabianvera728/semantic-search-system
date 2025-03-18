@@ -1,35 +1,43 @@
 from .entities import Dataset, DatasetColumn, DatasetRow
 from .repositories import DatasetRepository
-from .exceptions import (
-    DatasetException, 
-    DatasetNotFoundError, 
-    DatasetValidationError, 
-    UnauthorizedAccessError,
-    ColumnNotFoundError
-)
 from .value_objects import (
-    DatasetId, 
-    UserId, 
     CreateDatasetRequest, 
     UpdateDatasetRequest,
     AddRowRequest,
-    AddColumnRequest
+    AddColumnRequest,
+    GetDatasetRowsRequest
+)
+from .exceptions import (
+    DatasetException,
+    DatasetNotFoundError,
+    DatasetValidationError,
+    UnauthorizedAccessError,
+    ColumnNotFoundError
+)
+from .events import (
+    DomainEvent,
+    DatasetCreatedEvent,
+    DatasetUpdatedEvent,
+    DatasetRowsAddedEvent,
+    DatasetColumnsAddedEvent
 )
 
 __all__ = [
-    'Dataset',
-    'DatasetColumn',
-    'DatasetRow',
-    'DatasetRepository',
-    'DatasetException',
-    'DatasetNotFoundError',
-    'DatasetValidationError',
-    'UnauthorizedAccessError',
-    'ColumnNotFoundError',
-    'DatasetId',
-    'UserId',
-    'CreateDatasetRequest',
-    'UpdateDatasetRequest',
-    'AddRowRequest',
-    'AddColumnRequest'
+    # Entities
+    "Dataset", "DatasetColumn", "DatasetRow",
+    
+    # Repositories
+    "DatasetRepository",
+    
+    # Value Objects
+    "CreateDatasetRequest", "UpdateDatasetRequest", 
+    "AddRowRequest", "AddColumnRequest", "GetDatasetRowsRequest",
+    
+    # Exceptions
+    "DatasetException", "DatasetNotFoundError", "DatasetValidationError",
+    "UnauthorizedAccessError", "ColumnNotFoundError",
+    
+    # Events
+    "DomainEvent", "DatasetCreatedEvent", "DatasetUpdatedEvent",
+    "DatasetRowsAddedEvent", "DatasetColumnsAddedEvent"
 ] 

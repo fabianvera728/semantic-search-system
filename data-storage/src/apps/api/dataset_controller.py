@@ -9,9 +9,12 @@ from ...contexts.dataset.domain.value_objects import (
     CreateDatasetRequest, 
     UpdateDatasetRequest,
     AddRowRequest,
-    AddColumnRequest
+    AddColumnRequest,
+    GetDatasetRowsRequest
 )
 from ...middleware import get_current_user_id
+import logging
+logger = logging.getLogger(__name__)
 
 
 class DatasetColumnSchema(BaseModel):
@@ -50,10 +53,22 @@ class DatasetSchema(BaseModel):
 
 class DatasetDetailSchema(DatasetSchema):
     columns: List[DatasetColumnSchema]
-    rows: List[DatasetRowSchema]
+    rows: List[DatasetRowSchema] = []
 
     class Config:
         from_attributes = True
+
+
+class DatasetRowsSchema(BaseModel):
+    rows: List[Dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+class PaginationParams(BaseModel):
+    limit: int = Query(100, ge=1, le=1000)
+    offset: int = Query(0, ge=0)
 
 
 class CreateDatasetSchema(BaseModel):
@@ -147,8 +162,48 @@ class DatasetController:
             user_id: str = Depends(get_current_user_id)
         ):
             try:
+                logger.info(f"user_id: {user_id} 🅰️🅰️🅰️")
                 dataset = await self.dataset_service.get_dataset(dataset_id, user_id)
                 return self._entity_to_detail_schema(dataset)
+            except DatasetNotFoundError:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Dataset with ID {dataset_id} not found"
+                )
+            except UnauthorizedAccessError:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"You don't have permission to access this dataset"
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=str(e)
+                )
+                
+        @self.router.get("/{dataset_id}/rows", response_model=DatasetRowsSchema)
+        async def get_dataset_rows(
+            dataset_id: UUID = Path(...),
+            limit: int = Query(100, ge=1, le=1000),
+            offset: int = Query(0, ge=0),
+            user_id: str = Depends(get_current_user_id)
+        ):
+            try:
+                request = GetDatasetRowsRequest(
+                    dataset_id=dataset_id,
+                    limit=limit,
+                    offset=offset
+                )
+                
+                dataset = await self.dataset_service.get_dataset(dataset_id, user_id)
+                rows = await self.dataset_service.get_dataset_rows(request, user_id)
+                
+                return {
+                    "rows": rows,
+                    "total": dataset.row_count,
+                    "limit": limit,
+                    "offset": offset
+                }
             except DatasetNotFoundError:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -282,7 +337,6 @@ class DatasetController:
                 )
 
     def _entity_to_schema(self, dataset):
-        """Convert a Dataset entity to a DatasetSchema"""
         return {
             "id": str(dataset.id),
             "name": dataset.name,
@@ -297,10 +351,8 @@ class DatasetController:
         }
 
     def _entity_to_detail_schema(self, dataset):
-        """Convert a Dataset entity to a DatasetDetailSchema"""
         base_schema = self._entity_to_schema(dataset)
         
-        # Add columns and rows
         base_schema["columns"] = [
             {
                 "id": str(column.id),
@@ -310,13 +362,7 @@ class DatasetController:
             }
             for column in dataset.columns
         ]
-        
-        base_schema["rows"] = [
-            {
-                "id": str(row.id),
-                "data": row.data
-            }
-            for row in dataset.rows
-        ]
+
+        base_schema["rows"] = []
         
         return base_schema 

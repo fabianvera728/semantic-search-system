@@ -34,17 +34,20 @@ class Dataset:
     rows: List[DatasetRow] = field(default_factory=list)
 
     def add_row(self, row: DatasetRow) -> None:
+        """Add a row to the dataset and update the row count"""
         self.rows.append(row)
-        self.row_count = len(self.rows)
+        self.row_count += 1
         self.updated_at = datetime.now()
 
     def add_column(self, column: DatasetColumn) -> None:
+        """Add a column to the dataset and update the column count"""
         self.columns.append(column)
         self.column_count = len(self.columns)
         self.updated_at = datetime.now()
 
     def update_metadata(self, name: Optional[str] = None, description: Optional[str] = None, 
                         tags: Optional[List[str]] = None, is_public: Optional[bool] = None) -> None:
+        """Update the dataset metadata"""
         if name is not None:
             self.name = name
         if description is not None:

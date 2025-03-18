@@ -44,4 +44,11 @@ class AddColumnRequest:
     dataset_id: UUID
     name: str
     type: Literal["string", "number", "boolean", "date", "object"]
-    description: Optional[str] = None 
+    description: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class GetDatasetRowsRequest:
+    dataset_id: UUID
+    limit: int = 100
+    offset: int = 0 

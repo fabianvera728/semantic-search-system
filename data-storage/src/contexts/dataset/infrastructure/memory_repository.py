@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from uuid import UUID
 import copy
 
@@ -47,6 +47,16 @@ class InMemoryDatasetRepository(DatasetRepository):
         paginated = public_datasets[offset:offset + limit]
         return [copy.deepcopy(dataset) for dataset in paginated]
 
+    async def get_dataset_rows(self, dataset_id: UUID, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get paginated rows for a specific dataset"""
+        dataset = await self.find_by_id(dataset_id)
+        if not dataset:
+            return []
+            
+        # Extract row data and apply pagination
+        all_rows = [row.data for row in dataset.rows]
+        return all_rows[offset:offset + limit]
+
     async def delete(self, dataset_id: UUID) -> bool:
         """Delete a dataset by its ID"""
         if str(dataset_id) in self.datasets:
@@ -61,4 +71,8 @@ class InMemoryDatasetRepository(DatasetRepository):
         
         # Store a deep copy to prevent reference issues
         self.datasets[str(dataset.id)] = copy.deepcopy(dataset)
-        return dataset 
+        
+        # Return a clean copy without rows for consistency with SQLAlchemy repository
+        result_dataset = copy.deepcopy(dataset)
+        result_dataset.rows = []
+        return result_dataset 

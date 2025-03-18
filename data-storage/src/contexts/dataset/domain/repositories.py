@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from .entities import Dataset
@@ -39,4 +39,9 @@ class DatasetRepository(ABC):
     @abstractmethod
     async def update(self, dataset: Dataset) -> Dataset:
         """Update an existing dataset"""
+        pass
+        
+    @abstractmethod
+    async def get_dataset_rows(self, dataset_id: UUID, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get paginated rows for a specific dataset"""
         pass 

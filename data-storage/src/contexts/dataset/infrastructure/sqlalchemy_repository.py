@@ -25,11 +25,8 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
     def _get_session(self) -> AsyncSession:
         return db.get_session()
     
-    async def save(self, dataset: Dataset) -> Dataset:
-        logger.info(f"Guardando dataset: {dataset.name} (ID: {dataset.id})")
-        
+    async def save(self, dataset: Dataset) -> Dataset: 
         async with self._get_session() as session:
-            logger.info(f"Sesión obtenida: {session} 🚀🚀🚀🚀🚀🚀")
             try:
                 dataset_model = DatasetModel(
                     id=str(dataset.id),
@@ -46,9 +43,7 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                 
                 session.add(dataset_model)
                 await session.flush()
-                
-                # Agregar columnas
-                for column in dataset.columns:
+                for i, column in enumerate(dataset.columns):
                     column_model = DatasetColumnModel(
                         id=str(column.id),
                         dataset_id=str(dataset.id),
@@ -58,7 +53,7 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                     )
                     session.add(column_model)
                 
-                for row in dataset.rows:
+                for i, row in enumerate(dataset.rows):
                     row_model = DatasetRowModel(
                         id=str(row.id),
                         dataset_id=str(dataset.id),
@@ -67,82 +62,112 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                     session.add(row_model)
                 
                 await session.commit()
-                logger.info(f"Dataset guardado exitosamente: {dataset.name} (ID: {dataset.id})")
                 
                 return copy.deepcopy(dataset)
             except Exception as e:
                 await session.rollback()
-                logger.error(f"Error al guardar dataset: {e}")
                 raise
     
-    async def find_by_id(self, dataset_id: str) -> Optional[Dataset]:
+    async def find_by_id(self, dataset_id: UUID) -> Optional[Dataset]:
         async with self._get_session() as session:
-            stmt = select(DatasetModel).where(DatasetModel.id == dataset_id)
+            stmt = select(DatasetModel).where(DatasetModel.id == str(dataset_id))
             result = await session.execute(stmt)
             dataset_model = result.scalar_one_or_none()
             
             if not dataset_model:
                 return None
             
-            return self._model_to_entity(dataset_model)
+            return await self._model_to_entity_with_relations(dataset_model, session)
     
-    async def find_by_user_id(self, user_id: str, skip: int = 0, limit: int = 100) -> List[Dataset]:
+    async def find_by_user_id(self, user_id: str, limit: int = 100, offset: int = 0) -> List[Dataset]:
         async with self._get_session() as session:
-            stmt = select(DatasetModel).where(DatasetModel.user_id == user_id).offset(skip).limit(limit)
+            try: 
+                stmt = select(DatasetModel).where(DatasetModel.user_id == user_id).offset(offset).limit(limit)
+                result = await session.execute(stmt)
+                dataset_models = result.scalars().all()
+
+                return [
+                    await self._model_to_entity_with_relations(model, session) 
+                    for model in dataset_models
+                ]
+            except Exception as e:
+                raise
+    
+    async def find_public(self, limit: int = 100, offset: int = 0) -> List[Dataset]:
+        async with self._get_session() as session:
+            stmt = select(DatasetModel).where(DatasetModel.is_public == True).offset(offset).limit(limit)
             result = await session.execute(stmt)
             dataset_models = result.scalars().all()
             
-            return [self._model_to_entity(model) for model in dataset_models]
+            return [await self._model_to_entity_with_relations(model, session) for model in dataset_models]
     
-    async def find_public(self, skip: int = 0, limit: int = 100) -> List[Dataset]:
-        async with self._get_session() as session:
-            stmt = select(DatasetModel).where(DatasetModel.is_public == True).offset(skip).limit(limit)
-            result = await session.execute(stmt)
-            dataset_models = result.scalars().all()
-            
-            return [self._model_to_entity(model) for model in dataset_models]
-    
-    async def find_all(self, skip: int = 0, limit: int = 100) -> List[Dataset]:
-        async with self._get_session() as session:
-            stmt = select(DatasetModel).offset(skip).limit(limit)
-            result = await session.execute(stmt)
-            dataset_models = result.scalars().all()
-            
-            return [self._model_to_entity(model) for model in dataset_models]
-    
-    async def update(self, dataset: Dataset) -> Dataset:
-        logger.info(f"Actualizando dataset: {dataset.name} (ID: {dataset.id})")
-        
+    async def find_all(self, limit: int = 100, offset: int = 0) -> List[Dataset]:        
         async with self._get_session() as session:
             try:
-                stmt = select(DatasetModel).where(DatasetModel.id == str(dataset.id))
+                stmt = select(DatasetModel).offset(offset).limit(limit)
                 result = await session.execute(stmt)
-                dataset_model = result.scalar_one_or_none()
+                dataset_models = result.scalars().all()
                 
-                if not dataset_model:
-                    raise ValueError(f"Dataset with ID {dataset.id} not found")
+                detailed_datasets = []
+                for model in dataset_models:
+                    entity = await self._model_to_entity_with_relations(model, session)
+                    detailed_datasets.append(entity)
                 
-                dataset_model.name = dataset.name
-                dataset_model.description = dataset.description
-                dataset_model.updated_at = datetime.now()
-                dataset_model.user_id = dataset.user_id
-                dataset_model.row_count = dataset.row_count
-                dataset_model.column_count = dataset.column_count
-                dataset_model.tags = dataset.tags
-                dataset_model.is_public = dataset.is_public
+                return detailed_datasets
+            except Exception as e:
+                raise
+    
+    async def get_dataset_rows(self, dataset_id: UUID, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get paginated rows for a specific dataset"""
+        async with self._get_session() as session:
+            try:
+                # Query rows with pagination
+                stmt = (
+                    select(DatasetRowModel)
+                    .where(DatasetRowModel.dataset_id == str(dataset_id))
+                    .offset(offset)
+                    .limit(limit)
+                )
+                result = await session.execute(stmt)
+                row_models = result.scalars().all()
                 
-                await session.execute(delete(DatasetColumnModel).where(DatasetColumnModel.dataset_id == str(dataset.id)))
-                
-                for column in dataset.columns:
-                    column_model = DatasetColumnModel(
-                        id=str(column.id),
-                        dataset_id=str(dataset.id),
-                        name=column.name,
-                        type=column.type,
-                        description=column.description
-                    )
-                    session.add(column_model)
-                
+                # Convert models to dicts
+                return [row_model.data for row_model in row_models]
+            except Exception as e:
+                logger.error(f"Error fetching dataset rows: {str(e)}")
+                raise
+    
+    async def update(self, dataset: Dataset) -> Dataset:        
+        async with self._get_session() as session:
+            stmt = select(DatasetModel).where(DatasetModel.id == str(dataset.id))
+            result = await session.execute(stmt)
+            dataset_model = result.scalar_one_or_none()
+            
+            if not dataset_model:
+                raise ValueError(f"Dataset with ID {dataset.id} not found")
+            
+            dataset_model.name = dataset.name
+            dataset_model.description = dataset.description
+            dataset_model.updated_at = datetime.now()
+            dataset_model.user_id = dataset.user_id
+            dataset_model.row_count = dataset.row_count
+            dataset_model.column_count = dataset.column_count
+            dataset_model.tags = dataset.tags
+            dataset_model.is_public = dataset.is_public
+            
+            await session.execute(delete(DatasetColumnModel).where(DatasetColumnModel.dataset_id == str(dataset.id)))
+            
+            for column in dataset.columns:
+                column_model = DatasetColumnModel(
+                    id=str(column.id),
+                    dataset_id=str(dataset.id),
+                    name=column.name,
+                    type=column.type,
+                    description=column.description
+                )
+                session.add(column_model)
+            
+            if dataset.rows:
                 await session.execute(
                     delete(DatasetRowModel).where(DatasetRowModel.dataset_id == str(dataset.id))
                 )
@@ -154,22 +179,19 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                         data=row.data
                     )
                     session.add(row_model)
-                
-                await session.commit()
-                logger.info(f"Dataset actualizado exitosamente: {dataset.name} (ID: {dataset.id})")
-                
-                return copy.deepcopy(dataset)
-            except Exception as e:
-                await session.rollback()
-                logger.error(f"Error al actualizar dataset: {e}")
-                raise
+            
+            await session.commit()
+            
+            result_dataset = copy.deepcopy(dataset)
+            result_dataset.rows = []
+            return result_dataset
+            
+          
     
-    async def delete(self, dataset_id: str) -> None:
-        logger.info(f"Eliminando dataset con ID: {dataset_id}")
-        
+    async def delete(self, dataset_id: UUID) -> None:        
         async with self._get_session() as session:
             try:
-                stmt = select(DatasetModel).where(DatasetModel.id == dataset_id)
+                stmt = select(DatasetModel).where(DatasetModel.id == str(dataset_id))
                 result = await session.execute(stmt)
                 dataset_model = result.scalar_one_or_none()
                 
@@ -178,40 +200,79 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                 
                 await session.delete(dataset_model)
                 await session.commit()
-                logger.info(f"Dataset eliminado exitosamente: {dataset_id}")
             except Exception as e:
                 await session.rollback()
-                logger.error(f"Error al eliminar dataset: {e}")
                 raise
     
+    async def _model_to_entity_with_relations(self, model: DatasetModel, session) -> Dataset:
+        try:
+            dataset = Dataset(
+                name=model.name,
+                description=model.description,
+                user_id=model.user_id,
+                id=UUID(model.id),
+                created_at=model.created_at,
+                updated_at=model.updated_at,
+                row_count=model.row_count,
+                column_count=model.column_count,
+                tags=model.tags if model.tags is not None else [],
+                is_public=model.is_public
+            )
+            
+            # Always load columns since they're part of the schema definition
+            columns_stmt = select(DatasetColumnModel).where(DatasetColumnModel.dataset_id == model.id)
+            columns_result = await session.execute(columns_stmt)
+            columns = columns_result.scalars().all()
+            
+            for column_model in columns:
+                column = DatasetColumn(
+                    name=column_model.name,
+                    type=column_model.type,
+                    id=UUID(column_model.id),
+                    description=column_model.description
+                )
+                dataset.columns.append(column)
+            
+            # Do not load rows by default - they'll be accessed through the dedicated endpoint
+            # This significantly improves performance for datasets with many rows
+            
+            return dataset
+        except Exception as e:
+            raise
+
     def _model_to_entity(self, model: DatasetModel) -> Dataset:
-        dataset = Dataset(
-            name=model.name,
-            description=model.description,
-            user_id=model.user_id,
-            id=UUID(model.id),
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-            row_count=model.row_count,
-            column_count=model.column_count,
-            tags=model.tags,
-            is_public=model.is_public
-        )
-        
-        for column_model in model.columns:
-            column = DatasetColumn(
-                name=column_model.name,
-                type=column_model.type,
-                id=UUID(column_model.id),
-                description=column_model.description
+        try:
+            dataset = Dataset(
+                name=model.name,
+                description=model.description,
+                user_id=model.user_id,
+                id=UUID(model.id),
+                created_at=model.created_at,
+                updated_at=model.updated_at,
+                row_count=model.row_count,
+                column_count=model.column_count,
+                tags=model.tags if model.tags is not None else [],
+                is_public=model.is_public
             )
-            dataset.columns.append(column)
-        
-        for row_model in model.rows:
-            row = DatasetRow(
-                data=row_model.data,
-                id=UUID(row_model.id)
-            )
-            dataset.rows.append(row)
-        
-        return dataset 
+            
+            if hasattr(model, 'columns') and model.columns is not None:
+                for column_model in model.columns:
+                    column = DatasetColumn(
+                        name=column_model.name,
+                        type=column_model.type,
+                        id=UUID(column_model.id),
+                        description=column_model.description
+                    )
+                    dataset.columns.append(column)
+                        
+            if hasattr(model, 'rows') and model.rows is not None:
+                for row_model in model.rows:
+                    row = DatasetRow(
+                        data=row_model.data,
+                        id=UUID(row_model.id)
+                    )
+                    dataset.rows.append(row)
+            
+            return dataset
+        except Exception as e:
+            raise 

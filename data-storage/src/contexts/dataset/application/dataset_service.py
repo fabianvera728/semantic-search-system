@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
+from datetime import datetime
 
 from ..domain.entities import Dataset, DatasetColumn, DatasetRow
 from ..domain.repositories import DatasetRepository
@@ -8,17 +9,27 @@ from ..domain.value_objects import (
     CreateDatasetRequest, 
     UpdateDatasetRequest,
     AddRowRequest,
-    AddColumnRequest
+    AddColumnRequest,
+    GetDatasetRowsRequest
 )
+from ..domain.events import (
+    DatasetCreatedEvent,
+    DatasetUpdatedEvent,
+    DatasetRowsAddedEvent,
+    DatasetColumnsAddedEvent
+)
+
+from ....infrastructure.events import get_event_bus
+import logging
+logger = logging.getLogger(__name__)
 
 
 class DatasetService:
     def __init__(self, repository: DatasetRepository):
         self.repository = repository
+        self.event_bus = get_event_bus()
 
     async def create_dataset(self, request: CreateDatasetRequest) -> Dataset:
-        """Create a new dataset"""
-        # Create dataset entity
         dataset = Dataset(
             name=request.name,
             description=request.description,
@@ -27,7 +38,6 @@ class DatasetService:
             is_public=request.is_public
         )
 
-        # Add columns
         for column_data in request.columns:
             column = DatasetColumn(
                 name=column_data["name"],
@@ -36,117 +46,209 @@ class DatasetService:
             )
             dataset.add_column(column)
 
-        # Add rows
         for row_data in request.rows:
+            logger.info(f"row_data: {row_data}")
             row = DatasetRow(data=row_data)
             dataset.add_row(row)
 
-        # Save to repository
-        return await self.repository.save(dataset)
-
-    async def get_dataset(self, dataset_id: UUID, user_id: Optional[str] = None) -> Dataset:
-        """Get a dataset by ID"""
-        dataset = await self.repository.find_by_id(dataset_id)
+        saved_dataset = await self.repository.save(dataset)
         
+        await self._publish_dataset_created_event(saved_dataset)
+        
+        return saved_dataset
+
+    async def get_dataset(
+        self,
+        dataset_id: UUID,
+        user_id: Optional[str] = None
+    ) -> Dataset:
+        dataset = await self.repository.find_by_id(dataset_id)
         if not dataset:
             raise DatasetNotFoundError(dataset_id)
-        
-        # Check access permissions
-        if not dataset.is_public and user_id != dataset.user_id:
-            raise UnauthorizedAccessError(user_id, dataset_id)
-            
+
+        # Verificar acceso si no es público y se proporciona un user_id
+        if not dataset.is_public and user_id and user_id != dataset.user_id:
+            raise UnauthorizedAccessError()
+
         return dataset
 
-    async def update_dataset(self, request: UpdateDatasetRequest, user_id: str) -> Dataset:
-        """Update a dataset"""
-        dataset = await self.repository.find_by_id(request.dataset_id)
+    async def get_dataset_rows(
+        self,
+        request: GetDatasetRowsRequest,
+        user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        # Verificar que el dataset existe y el usuario tiene acceso
+        dataset = await self.get_dataset(request.dataset_id, user_id)
         
+        # Obtener filas con paginación
+        rows = await self.repository.get_dataset_rows(
+            dataset_id=request.dataset_id,
+            limit=request.limit,
+            offset=request.offset
+        )
+        
+        return rows
+
+    async def update_dataset(self, request: UpdateDatasetRequest, user_id: str) -> Dataset:
+        dataset = await self.repository.find_by_id(request.dataset_id)
         if not dataset:
             raise DatasetNotFoundError(request.dataset_id)
-        
-        # Check ownership
-        if user_id != dataset.user_id:
-            raise UnauthorizedAccessError(user_id, request.dataset_id)
-        
-        # Update fields
+
+        if dataset.user_id != user_id:
+            raise UnauthorizedAccessError()
+
         dataset.update_metadata(
             name=request.name,
             description=request.description,
             tags=request.tags,
             is_public=request.is_public
         )
+
+        updated_dataset = await self.repository.save(dataset)
         
-        # Save changes
-        return await self.repository.update(dataset)
+        # Publicar evento de dataset actualizado
+        await self._publish_dataset_updated_event(updated_dataset, request)
+        
+        return updated_dataset
 
     async def delete_dataset(self, dataset_id: UUID, user_id: str) -> bool:
-        """Delete a dataset"""
         dataset = await self.repository.find_by_id(dataset_id)
-        
         if not dataset:
             raise DatasetNotFoundError(dataset_id)
-        
-        # Check ownership
-        if user_id != dataset.user_id:
-            raise UnauthorizedAccessError(user_id, dataset_id)
-        
-        # Delete from repository
+
+        if dataset.user_id != user_id:
+            raise UnauthorizedAccessError()
+
         return await self.repository.delete(dataset_id)
 
     async def list_datasets(self, limit: int = 100, offset: int = 0) -> List[Dataset]:
-        """List all datasets with pagination"""
-        try:
-            return await self.repository.find_all(limit, offset)
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error al listar datasets: {e}")
-            raise e
+        return await self.repository.find_all(limit, offset)
 
-    async def list_user_datasets(self, user_id: str, limit: int = 100, offset: int = 0) -> List[Dataset]:
-        """List all datasets for a specific user"""
-        return await self.repository.find_by_user_id(user_id, limit, offset)
+    async def list_user_datasets(
+        self,
+        user_id: str,
+        limit: int = 100, 
+        offset: int = 0
+    ) -> List[Dataset]:
+        return await self.repository.find_by_user_id(
+            user_id=user_id,
+            limit=limit,
+            offset=offset
+        )
 
-    async def list_public_datasets(self, limit: int = 100, offset: int = 0) -> List[Dataset]:
-        """List all public datasets"""
-        return await self.repository.find_public(limit, offset)
+    async def list_public_datasets(
+        self,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Dataset]:
+        return await self.repository.find_public(
+            limit=limit,
+            offset=offset
+        )
 
     async def add_row(self, request: AddRowRequest, user_id: str) -> Dataset:
-        """Add a row to a dataset"""
         dataset = await self.repository.find_by_id(request.dataset_id)
-        
         if not dataset:
             raise DatasetNotFoundError(request.dataset_id)
-        
-        # Check ownership
-        if user_id != dataset.user_id:
-            raise UnauthorizedAccessError(user_id, request.dataset_id)
-        
-        # Add row
+
+        if dataset.user_id != user_id:
+            raise UnauthorizedAccessError()
+
         row = DatasetRow(data=request.data)
         dataset.add_row(row)
+
+        updated_dataset = await self.repository.save(dataset)
         
-        # Save changes
-        return await self.repository.update(dataset)
+        # Publicar evento de filas añadidas
+        await self._publish_rows_added_event(updated_dataset, [request.data])
+        
+        return updated_dataset
 
     async def add_column(self, request: AddColumnRequest, user_id: str) -> Dataset:
-        """Add a column to a dataset"""
         dataset = await self.repository.find_by_id(request.dataset_id)
-        
         if not dataset:
             raise DatasetNotFoundError(request.dataset_id)
-        
-        # Check ownership
-        if user_id != dataset.user_id:
-            raise UnauthorizedAccessError(user_id, request.dataset_id)
-        
-        # Add column
+
+        if dataset.user_id != user_id:
+            raise UnauthorizedAccessError()
+
         column = DatasetColumn(
             name=request.name,
             type=request.type,
             description=request.description
         )
         dataset.add_column(column)
+
+        updated_dataset = await self.repository.save(dataset)
         
-        # Save changes
-        return await self.repository.update(dataset) 
+        # Publicar evento de columnas añadidas
+        await self._publish_columns_added_event(updated_dataset, [
+            {"name": request.name, "type": request.type, "description": request.description}
+        ])
+        
+        return updated_dataset
+    
+    # Métodos privados para publicar eventos
+    
+    async def _publish_dataset_created_event(self, dataset: Dataset) -> None:
+        """Publica un evento cuando se crea un dataset"""
+        event = DatasetCreatedEvent(
+            event_id=uuid4(),
+            timestamp=datetime.now(),
+            event_type="dataset.created",
+            dataset_id=dataset.id,
+            name=dataset.name,
+            description=dataset.description,
+            user_id=dataset.user_id,
+            row_count=dataset.row_count,
+            column_count=dataset.column_count,
+            tags=dataset.tags,
+            is_public=dataset.is_public
+        )
+        
+        await self.event_bus.publish(event)
+        logger.info(f"Published dataset.created event for dataset {dataset.id}")
+        
+    async def _publish_dataset_updated_event(self, dataset: Dataset, request: UpdateDatasetRequest) -> None:
+        """Publica un evento cuando se actualiza un dataset"""
+        event = DatasetUpdatedEvent(
+            event_id=uuid4(),
+            timestamp=datetime.now(),
+            event_type="dataset.updated",
+            dataset_id=dataset.id,
+            name=request.name,
+            description=request.description,
+            tags=request.tags,
+            is_public=request.is_public
+        )
+        
+        await self.event_bus.publish(event)
+        logger.info(f"Published dataset.updated event for dataset {dataset.id}")
+        
+    async def _publish_rows_added_event(self, dataset: Dataset, rows_data: List[Dict[str, Any]]) -> None:
+        """Publica un evento cuando se añaden filas a un dataset"""
+        event = DatasetRowsAddedEvent(
+            event_id=uuid4(),
+            timestamp=datetime.now(),
+            event_type="dataset.rows_added",
+            dataset_id=dataset.id,
+            row_count=len(rows_data),
+            rows_data=rows_data
+        )
+        
+        await self.event_bus.publish(event)
+        logger.info(f"Published dataset.rows_added event for dataset {dataset.id}")
+        
+    async def _publish_columns_added_event(self, dataset: Dataset, columns_data: List[Dict[str, Any]]) -> None:
+        """Publica un evento cuando se añaden columnas a un dataset"""
+        event = DatasetColumnsAddedEvent(
+            event_id=uuid4(),
+            timestamp=datetime.now(),
+            event_type="dataset.columns_added",
+            dataset_id=dataset.id,
+            column_count=len(columns_data),
+            columns_data=columns_data
+        )
+        
+        await self.event_bus.publish(event)
+        logger.info(f"Published dataset.columns_added event for dataset {dataset.id}") 
