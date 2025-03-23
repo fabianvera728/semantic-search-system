@@ -4,12 +4,9 @@ from typing import Dict, List, Any, Callable, Awaitable, Type, Set, Optional
 import uuid
 from datetime import datetime
 
-# Eliminamos la importación directa que causa el ciclo
-# from ...contexts.dataset.domain.events import DomainEvent
 
 logger = logging.getLogger(__name__)
 
-# Definición de tipo para evitar la importación directa
 DomainEvent = Any  # Se usará tipado dinámico para evitar la importación circular
 
 class EventBus:

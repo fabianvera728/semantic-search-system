@@ -24,7 +24,7 @@ class EmbeddingRequest:
     def __init__(
         self,
         texts: List[str],
-        model: str = "sentence-transformer/all-MiniLM-L6-v2",
+        model: str = "sentence-transformers/all-MiniLM-L6-v2",
         batch_size: int = 32,
         additional_params: Optional[Dict[str, Any]] = None
     ):
@@ -42,7 +42,7 @@ class SearchRequest:
         dataset_id: str,
         limit: int = 10,
         search_type: str = "semantic",
-        embedding_model: str = "sentence-transformer/all-MiniLM-L6-v2",
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         hybrid_alpha: float = 0.5,
         additional_params: Optional[Dict[str, Any]] = None
     ):
@@ -83,7 +83,7 @@ class SearchController:
                 # Crear solicitud
                 embedding_request = EmbeddingRequest(
                     texts=request["texts"],
-                    model=request.get("model", "sentence-transformer/all-MiniLM-L6-v2"),
+                    model=request.get("model", "sentence-transformers/all-MiniLM-L6-v2"),
                     batch_size=request.get("batch_size", 32),
                     additional_params=request.get("additional_params")
                 )
@@ -121,9 +121,7 @@ class SearchController:
         
         @self.router.post("")
         async def search(request: dict):
-            """Realiza una búsqueda"""
             try:
-                # Validar solicitud
                 if "query" not in request:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -136,18 +134,16 @@ class SearchController:
                         detail="El campo 'dataset_id' es obligatorio"
                     )
                 
-                # Crear solicitud
                 search_request = SearchRequest(
                     query=request["query"],
                     dataset_id=request["dataset_id"],
                     limit=request.get("limit", 10),
                     search_type=request.get("search_type", "semantic"),
-                    embedding_model=request.get("embedding_model", "sentence-transformer/all-MiniLM-L6-v2"),
+                    embedding_model=request.get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2"),
                     hybrid_alpha=request.get("hybrid_alpha", 0.5),
                     additional_params=request.get("additional_params")
                 )
                 
-                # Realizar búsqueda
                 results = await self.search_service.search(
                     query=search_request.query,
                     dataset_id=search_request.dataset_id,
@@ -158,7 +154,6 @@ class SearchController:
                     additional_params=search_request.additional_params
                 )
                 
-                # Convertir resultados a diccionario
                 return {
                     "search_id": str(results.search_id),
                     "query": results.query,

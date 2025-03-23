@@ -17,26 +17,22 @@ logger = logging.getLogger(__name__)
 
 
 class SearchService:
-    """Servicio de búsqueda"""
     
     def __init__(
         self, 
         search_repository: SearchRepository,
         embedding_repository: EmbeddingRepository
     ):
-        """Inicializa el servicio de búsqueda"""
         self.search_repository = search_repository
         self.embedding_repository = embedding_repository
-        
-        logger.info("Servicio de búsqueda inicializado")
-    
+
     async def search(
         self, 
         query: str, 
         dataset_id: str, 
         limit: int = 10,
         search_type: str = "semantic",
-        embedding_model: str = "sentence-transformer/all-MiniLM-L6-v2",
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         hybrid_alpha: float = 0.5,
         additional_params: Optional[Dict[str, Any]] = None
     ) -> SearchResults:
@@ -52,14 +48,12 @@ class SearchService:
             additional_params=additional_params or {}
         )
         
-        # Crear solicitud de búsqueda
         request = SearchRequest(
             query=search_query,
             dataset_id=dataset_id_vo,
             config=search_config
         )
         
-        # Realizar búsqueda
         return await self.search_repository.search(request)
     
     async def get_dataset_embeddings(self, dataset_id: str) -> EmbeddingCollection:
@@ -69,7 +63,7 @@ class SearchService:
     async def generate_embeddings(
         self, 
         texts: List[str], 
-        model: str = "sentence-transformer/all-MiniLM-L6-v2",
+        model: str = "sentence-transformers/all-MiniLM-L6-v2",
         batch_size: int = 32,
         additional_params: Optional[Dict[str, Any]] = None
     ) -> List[List[float]]:

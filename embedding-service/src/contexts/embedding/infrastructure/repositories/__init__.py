@@ -1,9 +1,9 @@
 import logging
 
 from src.config import AppConfig
-from src.contexts.embedding.infrastructure.repositories.chroma_repository import ChromaEmbeddingRepository, ChromaDatasetRepository
-from src.contexts.embedding.infrastructure.repositories.data_storage_repository import RestDataStorageRepository
-from src.contexts.embedding.domain import EmbeddingRepository, DatasetRepository, DataStorageRepository
+from src.contexts.embedding.infrastructure.repositories.chroma_embedding_repository import ChromaEmbeddingRepository
+from src.contexts.embedding.infrastructure.repositories.chroma_dataset_repository import ChromaDatasetRepository
+from src.contexts.embedding.domain import EmbeddingRepository, DatasetRepository
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +28,7 @@ async def create_dataset_repository(config: AppConfig) -> DatasetRepository:
         return ChromaDatasetRepository(config)
 
 
-async def create_data_storage_repository(config: AppConfig) -> DataStorageRepository:
-    """Create and return the data storage repository implementation."""
-    logger.info("Using REST API for data storage access")
-    return RestDataStorageRepository(config)
-
-
 __all__ = [
     "create_embedding_repository",
     "create_dataset_repository",
-    "create_data_storage_repository"
 ] 

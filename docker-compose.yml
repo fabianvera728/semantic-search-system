@@ -167,8 +167,8 @@ services:
     container_name: chromadb
     volumes:
       - chromadb-data:/chroma/chroma
-    expose:
-      - "8000"
+    ports:
+      - "8010:8000"
     environment:
       - ALLOW_RESET=True
       - ANONYMIZED_TELEMETRY=False
@@ -232,14 +232,27 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8001
       - EMBEDDING_SERVICE_URL=http://embedding-service:8005
       - SEARCH_SERVICE_LOG_LEVEL=INFO
+      - SEARCH_SERVICE_ALLOWED_ORIGINS=*
+      - SEARCH_SERVICE_LOG_FILE=/app/logs/search-service.log
+      - DATA_STORAGE_URL=http://data-storage:8003
+      - DATA_PROCESSOR_URL=http://data-processor:8004
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - VECTOR_DB_TYPE=chromadb
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - CHROMADB_PERSISTENCE_PATH=/app/storage/chroma
+      - CACHE_ENABLED=true
+      - CACHE_TTL=3600
+      - BATCH_SIZE=32
+      - REQUEST_TIMEOUT=60
+      - AUTH_SERVICE_JWT_SECRET=your-secret-key-change-in-production
+      - AUTH_SERVICE_JWT_ALGORITHM=HS256
     depends_on:
       - auth-service
       - embedding-service
     networks:
       - semantic-search-network
     restart: unless-stopped
-    volumes:
-      - search-service-storage:/app/data
 
   # API Gateway (Orquestador)
   orchestrator:
@@ -279,7 +292,6 @@ volumes:
   data-harvester-storage:
   data-processor-storage:
   embedding-service-storage:
-  search-service-storage:
   mysql-data:
   chromadb-data:
   rabbitmq-data: 

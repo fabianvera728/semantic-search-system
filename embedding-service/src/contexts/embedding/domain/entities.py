@@ -59,6 +59,7 @@ class Dataset:
     created_at: datetime
     updated_at: datetime
     embedding_count: int = 0
+    metadata: Dict[str, Any] = field(default_factory=dict)
     
     @property
     def collection_name(self) -> str:

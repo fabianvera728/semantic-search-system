@@ -16,11 +16,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Download spaCy model
 RUN python -m spacy download en_core_web_md
 
+# Create necessary directories
+RUN mkdir -p /app/logs /app/storage/chroma
+
 # Copy application code
 COPY . .
 
 # Expose port
-EXPOSE 8000
+EXPOSE 8006
+
+ENV PYTHONUNBUFFERED=1
 
 # Run the application
-CMD ["python", "main.py"] 
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8006"]

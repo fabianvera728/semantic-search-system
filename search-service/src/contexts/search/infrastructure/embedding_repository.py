@@ -13,27 +13,22 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingRepositoryImpl(EmbeddingRepository):
-    """Implementación del repositorio de embeddings"""
     
     def __init__(self):
-        """Inicializa el repositorio de embeddings"""
         self.default_model = os.getenv("DEFAULT_EMBEDDING_MODEL", "sentence-transformer")
         self.default_model_params = {
             "model_name": os.getenv("DEFAULT_MODEL_NAME", "all-MiniLM-L6-v2")
         }
         
-        # Inicializar caché de modelos
         self.model_cache = {}
         
         logger.info(f"Repositorio de embeddings inicializado con modelo por defecto: {self.default_model}")
     
     async def generate_embeddings(self, request: EmbeddingRequest) -> np.ndarray:
-        """Genera embeddings para una lista de textos"""
         try:
-            # Determinar qué estrategia usar
             model_parts = request.model.split("/")
             if len(model_parts) > 1:
-                strategy_name = "sentence-transformer"
+                strategy_name = "sentence-transformers"
                 model_name = request.model
             else:
                 strategy_name = request.model
@@ -74,7 +69,7 @@ class EmbeddingRepositoryImpl(EmbeddingRepository):
             # Determinar qué estrategia usar
             model_parts = model_name.split("/")
             if len(model_parts) > 1:
-                strategy_name = "sentence-transformer"
+                strategy_name = "sentence-transformers"
                 model_param = model_name
             else:
                 strategy_name = model_name

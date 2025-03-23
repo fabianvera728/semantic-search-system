@@ -77,7 +77,7 @@ async def embedding_service_proxy(request: Request, path: str):
     """Proxy para el servicio de embeddings."""
     return await proxy_request(request, "embedding-service", path)
 
-@app.api_route("/search-service/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
+@app.api_route("/search/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
 async def search_service_proxy(request: Request, path: str):
     """Proxy para el servicio de búsqueda."""
     return await proxy_request(request, "search-service", path)

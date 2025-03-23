@@ -1,5 +1,5 @@
 from .entities import Embedding, EmbeddingBatch, Dataset, EmbeddingModel
-from .repositories import EmbeddingRepository, DatasetRepository, DataStorageRepository
+from .repositories import EmbeddingRepository, DatasetRepository
 from .exceptions import (
     EmbeddingServiceException, 
     EmbeddingGenerationError,
@@ -28,18 +28,14 @@ from .value_objects import (
 )
 
 __all__ = [
-    # Entities
     'Embedding',
     'EmbeddingBatch',
     'Dataset',
     'EmbeddingModel',
     
-    # Repositories
     'EmbeddingRepository',
     'DatasetRepository',
-    'DataStorageRepository',
-    
-    # Exceptions
+
     'EmbeddingServiceException',
     'EmbeddingGenerationError',
     'EmbeddingNotFoundError',
@@ -50,7 +46,6 @@ __all__ = [
     'UnauthorizedError',
     'VectorDBError',
     
-    # Value Objects
     'EmbeddingId',
     'DatasetId',
     'RowId',

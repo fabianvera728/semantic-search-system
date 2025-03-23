@@ -8,9 +8,7 @@ from datetime import datetime
 from ..domain import (
     EmbeddingRepository,
     DatasetRepository,
-    DataStorageRepository,
     Embedding,
-    EmbeddingBatch,
     Dataset,
     EmbeddingModel,
     GenerateEmbeddingRequest,
@@ -23,7 +21,6 @@ from ..domain import (
     EmbeddingResult,
     DatasetNotFoundError,
     EmbeddingNotFoundError,
-    DataStorageError,
     InvalidRequestError
 )
 
@@ -35,11 +32,9 @@ class EmbeddingService:
         self,
         embedding_repository: EmbeddingRepository,
         dataset_repository: DatasetRepository,
-        data_storage_repository: DataStorageRepository
     ):
         self.embedding_repository = embedding_repository
         self.dataset_repository = dataset_repository
-        self.data_storage_repository = data_storage_repository
     
     async def generate_embedding(self, request: GenerateEmbeddingRequest) -> EmbeddingResult:
         """Generate a single embedding"""
@@ -74,7 +69,6 @@ class EmbeddingService:
             )
     
     async def generate_batch_embeddings(self, request: BatchEmbeddingRequest) -> List[EmbeddingResult]:
-        """Generate embeddings for a batch of texts"""
         start_time = time.time()
         
         if len(request.texts) != len(request.row_ids):
@@ -115,132 +109,177 @@ class EmbeddingService:
             ]
     
     async def process_dataset_rows(self, request: ProcessDatasetRowsRequest) -> Dict[str, Any]:
-        """Process rows from a dataset and generate embeddings"""
         start_time = time.time()
+        dataset_id = request.dataset_id
+        rows = request.rows or []
         
-        # Check if dataset exists
-        dataset_info = await self.data_storage_repository.get_dataset_info(request.dataset_id)
-        if not dataset_info:
-            raise DatasetNotFoundError(request.dataset_id)
-        
-        # Create dataset in embedding storage if it doesn't exist
-        dataset = await self.dataset_repository.get_dataset(request.dataset_id)
-        if not dataset:
-            # Get model dimension
-            model = await self.embedding_repository.get_model(request.model_name)
-            if not model:
-                model = EmbeddingModel(
-                    name=request.model_name,
-                    dimension=384  # Default dimension for all-MiniLM-L6-v2
-                )
+        try:
+            dataset = await self.dataset_repository.get_dataset(dataset_id)
+            text_fields = request.text_fields or []
             
-            create_dataset_request = CreateDatasetRequest(
-                dataset_id=request.dataset_id,
-                name=dataset_info.get("name", f"Dataset {request.dataset_id}"),
-                dimension=model.dimension
-            )
+            if not text_fields and rows:
+                sample_row = rows[0]
+                
+                for field, value in sample_row.items():
+                    if isinstance(value, str) and field != "id" and len(value.strip()) > 0:
+                        text_fields.append(field)
             
-            dataset = await self.dataset_repository.create_dataset(create_dataset_request)
+            if not text_fields:
+                return {
+                    "success": False,
+                    "processed": 0,
+                    "errors": 0,
+                    "message": "No text fields found"
+                }
         
-        # Get rows to process
-        if request.row_ids:
-            # Process specific rows
+        except Exception as e:
             rows = []
-            for row_id in request.row_ids:
-                row = await self.data_storage_repository.get_dataset_row(request.dataset_id, row_id)
-                if row:
-                    rows.append(row)
-        else:
-            # Process all rows with pagination
-            rows = await self.data_storage_repository.get_dataset_rows(
-                request.dataset_id,
-                offset=0,
-                limit=request.batch_size
-            )
-            
-            total_rows_processed = len(rows)
-            while len(rows) == request.batch_size:
-                next_rows = await self.data_storage_repository.get_dataset_rows(
-                    request.dataset_id,
-                    offset=total_rows_processed,
-                    limit=request.batch_size
-                )
-                
-                if not next_rows:
-                    break
-                    
-                rows.extend(next_rows)
-                total_rows_processed += len(next_rows)
-                
-                if total_rows_processed >= 1000:  # Safety limit
-                    logger.warning(f"Reached safety limit of 1000 rows for dataset {request.dataset_id}")
-                    break
         
-        logger.info(f"Processing {len(rows)} rows from dataset {request.dataset_id}")
-        
-        # Generate and save embeddings
         results = []
+        errors = 0
+        
         for i in range(0, len(rows), request.batch_size):
             batch_rows = rows[i:i+request.batch_size]
             
-            texts = []
-            row_ids = []
+            try:
+                texts = []
+                row_ids = []
+                
+                for row in batch_rows:
+                    if not row or not isinstance(row, dict):
+                        continue
+                    
+                    row_id = row.get("id")
+                    if not row_id:
+                        continue
+                    
+                    if request.text_fields:
+                        text_content = " ".join([
+                            str(row.get(field, "")) 
+                            for field in request.text_fields 
+                            if field in row and row.get(field)
+                        ])
+                    else:
+                        text_content = " ".join([
+                            str(value) 
+                            for key, value in row.items() 
+                            if isinstance(value, str) and key != "id"
+                        ])
+                    
+                    if text_content.strip():
+                        texts.append(text_content)
+                        row_ids.append(row_id)
+                
+                if texts:
+                    batch_request = BatchEmbeddingRequest(
+                        texts=texts,
+                        dataset_id=request.dataset_id,
+                        row_ids=row_ids,
+                        model_name=request.model_name,
+                        batch_size=request.batch_size
+                    )
+                    
+                    max_retries = 3
+                    retry_count = 0
+                    
+                    while retry_count < max_retries:
+                        try:
+                            batch_results = await self.generate_batch_embeddings(batch_request)
+                            results.extend(batch_results)
+                            break
+                        except Exception as batch_error:
+                            retry_count += 1
+                            if retry_count >= max_retries:
+                                raise
+                            
+                            retry_delay = 0.5 * (2 ** (retry_count - 1))
+                            logger.warning(f"Retry {retry_count}/{max_retries} for batch embeddings: {str(batch_error)}. Retrying in {retry_delay}s...")
+                            await asyncio.sleep(retry_delay)
             
-            for row in batch_rows:
-                if not row or not isinstance(row, dict):
-                    continue
-                
-                # Extract text fields
-                row_id = row.get("id")
-                if not row_id:
-                    continue
-                
-                # Process text fields
-                if request.text_fields:
-                    # Use specific fields
-                    text_content = " ".join([
-                        str(row.get(field, "")) 
-                        for field in request.text_fields 
-                        if field in row and row.get(field)
-                    ])
-                else:
-                    # Use all string fields
-                    text_content = " ".join([
-                        str(value) 
-                        for key, value in row.items() 
-                        if isinstance(value, str) and key != "id"
-                    ])
-                
-                if text_content.strip():
-                    texts.append(text_content)
-                    row_ids.append(row_id)
-            
-            if texts:
-                batch_request = BatchEmbeddingRequest(
-                    texts=texts,
-                    dataset_id=request.dataset_id,
-                    row_ids=row_ids,
-                    model_name=request.model_name,
-                    batch_size=request.batch_size
-                )
-                
-                batch_results = await self.generate_batch_embeddings(batch_request)
-                results.extend(batch_results)
+            except Exception as batch_process_err:
+                logger.error(f"Error processing batch: {str(batch_process_err)}")
+                errors += len(batch_rows)
         
-        # Update dataset stats
-        dataset.embedding_count = len(results)
-        dataset.updated_at = datetime.now()
-        await self.dataset_repository.update_dataset(dataset)
+        if dataset:
+            try:
+                dataset.embedding_count = len(results)
+                dataset.updated_at = datetime.now()
+                await self.dataset_repository.update_dataset(dataset)
+                logger.info(f"Updated dataset stats: {dataset.id}, embedding count: {dataset.embedding_count}")
+            except Exception as update_err:
+                logger.warning(f"Error updating dataset stats: {str(update_err)}")
         
         execution_time = time.time() - start_time
         
         return {
+            "success": len(results) > 0,
             "dataset_id": request.dataset_id,
             "processed_rows": len(rows),
             "embeddings_created": len(results),
+            "errors": errors,
             "execution_time_seconds": execution_time,
             "model_name": request.model_name
         }
+    
+    async def _get_or_create_dataset(self, dataset_id: str, dataset_info: Dict[str, Any], model_name: str) -> Optional[Dataset]:
+        dataset = None
+        
+        try:
+            dataset = await self.dataset_repository.get_dataset(dataset_id)
+            if dataset:
+                logger.info(f"Found dataset in repository: {dataset_id}")
+                return dataset
+        except Exception as e:
+            logger.warning(f"Dataset not found in repository: {str(e)}")
+        
+        try:
+            from src.contexts.embedding.infrastructure.repositories.chroma_dataset_repository import ChromaDatasetRepository
+            if isinstance(self.dataset_repository, ChromaDatasetRepository):
+                chroma_repo = self.dataset_repository
+                client = await chroma_repo.get_chroma_client()
+                
+                collection_name = chroma_repo._get_dataset_collection_name(dataset_id)
+                try:
+                    collection = client.get_collection(collection_name)
+                    logger.info(f"Found dataset collection in ChromaDB: {collection_name}")
+                    
+                    dataset = Dataset(
+                        id=dataset_id,
+                        name=dataset_info.get("name", f"Dataset {dataset_id}"),
+                        created_at=datetime.now(),
+                        updated_at=datetime.now(),
+                        embedding_count=0,
+                        metadata=collection.metadata or {}
+                    )
+                    logger.info(f"Created virtual dataset from ChromaDB collection: {dataset.id}")
+                    return dataset
+                except Exception as coll_err:
+                    logger.warning(f"Collection not found in ChromaDB: {str(coll_err)}")
+        except Exception as chroma_err:
+            logger.warning(f"Error accessing ChromaDB: {str(chroma_err)}")
+        
+        try:
+            model = await self.embedding_repository.get_model(model_name)
+            if not model:
+                model = EmbeddingModel(
+                    name=model_name,
+                    dimension=384 
+                )
+            
+            create_dataset_request = CreateDatasetRequest(
+                dataset_id=dataset_id,
+                name=dataset_info.get("name", f"Dataset {dataset_id}"),
+                dimension=model.dimension
+            )
+            
+            logger.info(f"Creating new dataset in embedding storage: {dataset_id}")
+            dataset = await self.dataset_repository.create_dataset(create_dataset_request)
+            logger.info(f"Successfully created dataset: {dataset_id}")
+            return dataset
+        except Exception as create_err:
+            logger.error(f"Failed to create dataset: {str(create_err)}")
+        
+        return None
     
     async def get_embedding(self, request: GetEmbeddingRequest) -> Embedding:
         """Get a single embedding"""

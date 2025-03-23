@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
-from uuid import UUID
-import numpy as np
+from typing import List, Optional
 
 from .entities import Embedding, EmbeddingBatch, Dataset, EmbeddingModel
 from .value_objects import (
@@ -11,7 +9,6 @@ from .value_objects import (
     GetEmbeddingRequest,
     DeleteEmbeddingRequest,
     CreateDatasetRequest,
-    ProcessDatasetRowsRequest
 )
 
 
@@ -92,30 +89,3 @@ class DatasetRepository(ABC):
     async def update_dataset(self, dataset: Dataset) -> Dataset:
         """Update dataset information"""
         pass
-
-
-class DataStorageRepository(ABC):
-    @abstractmethod
-    async def get_dataset_rows(
-        self, 
-        dataset_id: str, 
-        offset: int = 0, 
-        limit: int = 100, 
-        filter_criteria: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
-        """Get dataset rows from data storage service"""
-        pass
-    
-    @abstractmethod
-    async def get_dataset_row(
-        self, 
-        dataset_id: str, 
-        row_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """Get specific dataset row from data storage service"""
-        pass
-    
-    @abstractmethod
-    async def get_dataset_info(self, dataset_id: str) -> Optional[Dict[str, Any]]:
-        """Get dataset information from data storage service"""
-        pass 

@@ -101,7 +101,6 @@ class CommandHandlers:
     async def handle_process_dataset_rows(
         self, dto: ProcessDatasetRowsRequestDTO
     ) -> Dict[str, Any]:
-        """Handle a request to process dataset rows."""
         domain_request = process_dataset_rows_dto_to_domain(dto)
         result = await self.embedding_service.process_dataset_rows(domain_request)
         return result
@@ -128,7 +127,7 @@ class CommandHandlers:
         """Handle a request to list embeddings."""
         domain_request = list_embeddings_dto_to_domain(dto)
         embeddings = await self.embedding_service.list_embeddings(domain_request)
-        embedding_dtos = embeddings_to_dtos(embeddings, dto.include_vectors)
+        embedding_dtos = embeddings_to_dtos(embeddings)
         
         return {
             "dataset_id": dto.dataset_id,

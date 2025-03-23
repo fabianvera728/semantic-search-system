@@ -41,9 +41,9 @@ class SentenceTransformerStrategy(EmbeddingStrategy):
             from sentence_transformers import SentenceTransformer
             self.model_name = model_name
             self.model = SentenceTransformer(model_name)
-            logger.info(f"Modelo Sentence Transformer '{model_name}' cargado correctamente")
+            logger.info(f"[✅] Modelo Sentence Transformer '{model_name}' cargado correctamente")
         except Exception as e:
-            logger.error(f"Error al cargar el modelo Sentence Transformer '{model_name}': {str(e)}")
+            logger.error(f"[❌] Error al cargar el modelo Sentence Transformer '{model_name}': {str(e)}")
             raise
     
     def generate_embeddings(self, texts: List[str], **kwargs) -> np.ndarray:
@@ -73,7 +73,7 @@ class SentenceTransformerStrategy(EmbeddingStrategy):
         """Devuelve información sobre el modelo"""
         return {
             "name": self.model_name,
-            "type": "sentence-transformer",
+            "type": "sentence-transformers",
             "dimension": self.get_dimension(),
             "description": "Modelo de Sentence Transformers para generar embeddings"
         }
@@ -81,7 +81,7 @@ class SentenceTransformerStrategy(EmbeddingStrategy):
     @classmethod
     def get_strategy_name(cls) -> str:
         """Devuelve el nombre de la estrategia"""
-        return "sentence-transformer"
+        return "sentence-transformers"
 
 
 class UniversalSentenceEncoderStrategy(EmbeddingStrategy):

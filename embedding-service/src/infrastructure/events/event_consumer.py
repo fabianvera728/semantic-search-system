@@ -74,92 +74,88 @@ async def handle_dataset_created_event(event_data: Dict[str, Any]) -> None:
         # Procesar los valores del evento para convertir cadenas a objetos nativos
         event_data = parse_json_values(event_data)
         
+        # Asegurar que dataset_id sea un string para ambos DTOs
         dataset_id = event_data.get('dataset_id')
-        logger.info(f"[✅] Handling dataset.created event for dataset {dataset_id}")
-        logger.debug(f"Event data: {json.dumps(event_data, default=str)}")
+        dataset_id_str = str(dataset_id)
         
-        # Si el dataset_id es un string que parece un UUID, convertirlo a UUID
-        if isinstance(dataset_id, str):
-            try:
-                dataset_id = UUID(dataset_id)
-                logger.info(f"Converted dataset_id string to UUID: {dataset_id}")
-                event_data['dataset_id'] = dataset_id
-            except ValueError:
-                logger.warning(f"dataset_id {dataset_id} is not a valid UUID, using as string")
+        logger.info(f"[✅] Handling dataset.created event for dataset {dataset_id_str}")
+        logger.debug(f"Event data: {json.dumps(event_data, default=str)}")
         
         # Obtener el command handler
         command_handlers = get_command_handlers()
         
         # Crear el dataset en el embedding-service
         create_request = CreateDatasetRequestDTO(
-            dataset_id=event_data.get('dataset_id'),
-            name=event_data.get('name', f"Dataset {event_data.get('dataset_id')}")
+            dataset_id=dataset_id_str,
+            name=event_data.get('name', f"Dataset {dataset_id_str}")
         )
         
-        logger.info(f"Creating dataset with ID: {event_data.get('dataset_id')} (type: {type(event_data.get('dataset_id')).__name__})")
+        logger.info(f"Creating dataset with ID: {dataset_id_str} (type: string)")
         create_result = await command_handlers.create_dataset_controller.execute(create_request.dict())
         
         if not create_result.success:
             logger.error(f"Failed to create dataset: {create_result.error}")
             return
         
-        logger.info(f"Dataset created successfully, now processing rows...")
-        # Procesar las filas del dataset
-        process_request = ProcessDatasetRowsRequestDTO(
-            dataset_id=event_data.get('dataset_id')
-        )
+        logger.info(f"Dataset created successfully with ID: {dataset_id_str}")
+        logger.info(f"✅ Successfully processed dataset {dataset_id_str} from event")
         
-        process_result = await command_handlers.process_dataset_rows_controller.execute(process_request.dict())
-        
-        if not process_result.success:
-            logger.error(f"Failed to process dataset rows: {process_result.error}")
-            return
-            
-        logger.info(f"✅ Successfully processed dataset {event_data.get('dataset_id')} from event")
+        # NOTA: Evitamos procesar filas inmediatamente para evitar problemas de consistencia
+        # Las filas se procesarán cuando se reciba el evento dataset.rows_added
         
     except Exception as e:
         logger.exception(f"Error handling dataset.created event: {str(e)}")
 
 
 async def handle_dataset_rows_added_event(event_data: Dict[str, Any]) -> None:
-    """
-    Manejador para el evento dataset.rows_added
-    Procesa las nuevas filas añadidas al dataset
-    """
     try:
-        # Procesar los valores del evento para convertir cadenas a objetos nativos
         event_data = parse_json_values(event_data)
         
-        dataset_id = event_data.get('dataset_id')
+        dataset_id = str(event_data.get('dataset_id', ''))
+        rows = event_data.get('rows_data', [])
+        
         logger.info(f"[✅] Handling dataset.rows_added event for dataset {dataset_id}")
-        logger.debug(f"Event data: {json.dumps(event_data, default=str)}")
+        logger.info(f"[🔍] Event data: {json.dumps(event_data, default=str)}")
+        logger.info(f"[🔍] Rows: {rows}")
         
-        # Si el dataset_id es un string que parece un UUID, convertirlo a UUID
-        if isinstance(dataset_id, str):
-            try:
-                dataset_id = UUID(dataset_id)
-                logger.info(f"Converted dataset_id string to UUID: {dataset_id}")
-                event_data['dataset_id'] = dataset_id
-            except ValueError:
-                logger.warning(f"dataset_id {dataset_id} is not a valid UUID, using as string")
-        
-        # Obtener el command handler
         command_handlers = get_command_handlers()
-        
-        # Procesar las filas del dataset
-        process_request = ProcessDatasetRowsRequestDTO(
-            dataset_id=dataset_id
-        )
-        
-        logger.info(f"Processing rows for dataset ID: {dataset_id} (type: {type(dataset_id).__name__})")
-        process_result = await command_handlers.process_dataset_rows_controller.execute(process_request.dict())
-        
-        if not process_result.success:
-            logger.error(f"Failed to process dataset rows: {process_result.error}")
-            return
+
+        try:
+            logger.info(f"Ensuring dataset {dataset_id} exists before processing rows")
             
-        logger.info(f"✅ Successfully processed rows for dataset {dataset_id} from event")
+            max_retries = 3
+            base_delay = 0.5
+            
+            async def process_with_retry(attempt=0):
+                try:
+                    process_request = ProcessDatasetRowsRequestDTO(
+                        dataset_id=dataset_id,
+                        rows=rows
+                    )
+                    
+                    logger.info(f"Processing rows for dataset ID: {dataset_id} (attempt {attempt+1}/{max_retries})")
+                    return await command_handlers.process_dataset_rows_controller.execute(process_request.dict())
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        retry_delay = base_delay * (2 ** attempt)
+                        logger.warning(f"Retry {attempt+1}/{max_retries} failed: {str(e)}. Retrying in {retry_delay}s...")
+                        await asyncio.sleep(retry_delay)
+                        return await process_with_retry(attempt + 1)
+                    else:
+                        logger.error(f"Failed to process rows after {max_retries} attempts: {str(e)}")
+                        raise
+            
+            process_result = await process_with_retry()
+            
+            if not process_result.success:
+                logger.error(f"Failed to process dataset rows: {process_result.error}")
+                return
+                
+            logger.info(f"✅ Successfully processed rows for dataset {dataset_id} from event")
         
+        except Exception as e:
+            logger.error(f"Error processing rows for dataset {dataset_id}: {str(e)}")
+            
     except Exception as e:
         logger.exception(f"Error handling dataset.rows_added event: {str(e)}")
 
@@ -363,20 +359,12 @@ class RabbitMQEventConsumer(EventConsumer):
         """Procesa un mensaje recibido de RabbitMQ"""
         async with message.process():
             try:
-                # Obtener el tipo de evento desde la routing key
                 event_type = message.routing_key
                 
-                # Decodificar el cuerpo del mensaje
                 body = message.body.decode()
-                logger.info(f"📨 Received raw message: {body[:200]}...")
-                
-                # Decodificar JSON y procesar sus valores
                 raw_event_data = json.loads(body)
                 event_data = parse_json_values(raw_event_data)
-                
-                logger.info(f"📨 Received event from RabbitMQ: {event_type} - ID: {event_data.get('event_id', 'N/A')}")
-                
-                # Obtener el manejador para este tipo de evento
+
                 handler = self.event_handlers.get(event_type)
                 
                 if not handler:
@@ -414,7 +402,7 @@ def setup_event_consumers(app: FastAPI) -> None:
     """
     Configura los consumidores de eventos según la configuración.
     """
-    from ...config import get_app_config
+    from src.config import get_app_config
     config = get_app_config()
     
     if not config.event_consumer_enabled:

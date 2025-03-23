@@ -74,15 +74,16 @@ class ListEmbeddingsRequest:
 class CreateDatasetRequest:
     dataset_id: str
     name: str
-    dimension: int = 384  # Default dimension for all-MiniLM-L6-v2
+    dimension: int = 384
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ProcessDatasetRowsRequest:
     dataset_id: str
-    row_ids: Optional[List[str]] = None  # If None, process all rows
+    rows: Optional[List[Dict[str, Any]]] = None
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
-    text_fields: Optional[List[str]] = None  # If None, process all text fields
+    text_fields: Optional[List[str]] = None
     batch_size: int = 32
     force_refresh: bool = False
 

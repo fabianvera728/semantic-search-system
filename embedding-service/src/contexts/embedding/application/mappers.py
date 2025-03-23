@@ -31,7 +31,7 @@ from .dtos import (
 
 
 # Domain to DTO mappers
-def embedding_to_dto(embedding: Embedding, include_vector: bool = False) -> EmbeddingDTO:
+def embedding_to_dto(embedding: Embedding, include_vector: bool = True) -> EmbeddingDTO:
     """Convert a domain Embedding to an EmbeddingDTO."""
     vector = None
     if include_vector and embedding.vector is not None:
@@ -41,7 +41,7 @@ def embedding_to_dto(embedding: Embedding, include_vector: bool = False) -> Embe
         embedding_id=embedding.id,
         dataset_id=embedding.dataset_id,
         row_id=embedding.row_id,
-        model_name=embedding.model_name,
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
         dimension=embedding.vector.shape[0] if embedding.vector is not None else 0,
         created_at=embedding.created_at,
         vector=vector
@@ -64,10 +64,15 @@ def embedding_result_to_dto(result: EmbeddingResult) -> EmbeddingResultDTO:
 
 def dataset_to_dto(dataset: Dataset) -> DatasetDTO:
     """Convert a domain Dataset to a DatasetDTO."""
+    # Obtener dimensión desde los metadatos
+    dimension = 384  # valor por defecto
+    if dataset.metadata and 'dimension' in dataset.metadata:
+        dimension = dataset.metadata['dimension']
+        
     return DatasetDTO(
         dataset_id=dataset.id,
         name=dataset.name,
-        dimension=dataset.dimension,
+        dimension=dimension,
         embedding_count=dataset.embedding_count,
         created_at=dataset.created_at,
         updated_at=dataset.updated_at,
@@ -134,7 +139,7 @@ def list_embeddings_dto_to_domain(dto: ListEmbeddingsRequestDTO) -> ListEmbeddin
 def create_dataset_dto_to_domain(dto: CreateDatasetRequestDTO) -> CreateDatasetRequest:
     """Convert a CreateDatasetRequestDTO to a domain CreateDatasetRequest."""
     return CreateDatasetRequest(
-        dataset_id=str(UUID(int=0)) if not hasattr(dto, 'dataset_id') else dto.dataset_id,
+        dataset_id=dto.dataset_id if hasattr(dto, 'dataset_id') and dto.dataset_id else str(UUID(int=0)),
         name=dto.name,
         dimension=dto.dimension,
         metadata=dto.metadata
@@ -142,19 +147,16 @@ def create_dataset_dto_to_domain(dto: CreateDatasetRequestDTO) -> CreateDatasetR
 
 
 def process_dataset_rows_dto_to_domain(dto: ProcessDatasetRowsRequestDTO) -> ProcessDatasetRowsRequest:
-    """Convert a ProcessDatasetRowsRequestDTO to a domain ProcessDatasetRowsRequest."""
     return ProcessDatasetRowsRequest(
         dataset_id=dto.dataset_id,
         text_fields=dto.text_fields,
-        row_ids=dto.row_ids,
+        rows=dto.rows,
         model_name=dto.model_name,
         batch_size=dto.batch_size
     )
 
 
-# List conversion helpers
-def embeddings_to_dtos(embeddings: List[Embedding], include_vectors: bool = False) -> List[EmbeddingDTO]:
-    """Convert a list of domain Embeddings to a list of EmbeddingDTOs."""
+def embeddings_to_dtos(embeddings: List[Embedding], include_vectors: bool = True) -> List[EmbeddingDTO]:
     return [embedding_to_dto(embedding, include_vectors) for embedding in embeddings]
 
 
