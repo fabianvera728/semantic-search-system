@@ -79,7 +79,9 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
                     text=text,
                     dataset_id=request.dataset_id,
                     row_id=request.row_ids[i],
-                    metadata=request.metadata,
+                    metadata= {
+                        'id': str(request.row_ids[i]),
+                    },
                     created_at=datetime.now()
                 )
                 batch.add_embedding(embedding)
@@ -130,11 +132,11 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
             ids = [str(embedding.id) for embedding in batch.embeddings]
             embeddings = [embedding.vector.tolist() for embedding in batch.embeddings]
             metadatas = [{
-                "dataset_id": embedding.dataset_id,
-                "row_id": embedding.row_id,
+                "dataset_id": str(embedding.dataset_id),
+                "row_id": str(embedding.row_id),
                 "model_name": self.model_name,
                 "created_at": embedding.created_at.isoformat(),
-                **embedding.metadata
+                **{k: str(v) if isinstance(v, (UUID, datetime)) else v for k, v in embedding.metadata.items()}
             } for embedding in batch.embeddings]
             documents = [embedding.text for embedding in batch.embeddings]
             

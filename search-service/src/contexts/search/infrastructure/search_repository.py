@@ -279,7 +279,6 @@ class SearchRepositoryImpl(SearchRepository):
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self.embedding_service_url}/datasets/{dataset_id}/embeddings?limit=1000",
-
                     timeout=30.0
                 )
 
@@ -296,8 +295,6 @@ class SearchRepositoryImpl(SearchRepository):
                 data = response.json()
                 
                 embeddings_data = data.get("embeddings", [])
-                texts = data.get("texts", [])
-                metadata = data.get("metadata", [])
                 
                 if not embeddings_data or len(embeddings_data) == 0:
                     raise ValueError(f"No se encontraron embeddings para el dataset {dataset_id}")
@@ -305,14 +302,11 @@ class SearchRepositoryImpl(SearchRepository):
                 embedding_collection = EmbeddingCollection(dataset_id=dataset_id)
                 
                 for i, embedding_vector in enumerate(embeddings_data):
-                    text = texts[i] if i < len(texts) else ""
-                    meta = metadata[i] if i < len(metadata) else {}
-                    
                     embedding = EmbeddingVector(
                         vector=np.array(embedding_vector['vector'], dtype=np.float32),
-                        text=text,           
-                        metadata=meta,
-                        id=meta.get("id", f"item_{i}")
+                        text=embedding_vector['text'],           
+                        metadata=embedding_vector['metadata'],
+                        id=embedding_vector['row_id']
                     )
                     
                     embedding_collection.add_embedding(embedding)

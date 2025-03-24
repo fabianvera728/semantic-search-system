@@ -10,9 +10,11 @@ class EmbeddingDTO(BaseModel):
     row_id: str
     model_name: str
     dimension: int
+    text: str
     created_at: datetime
     vector: Optional[List[float]] = None
-    
+    metadata: Optional[Dict[str, Any]] = None
+
     class Config:
         from_attributes = True
 

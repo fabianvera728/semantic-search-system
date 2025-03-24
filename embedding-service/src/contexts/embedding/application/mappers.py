@@ -44,7 +44,9 @@ def embedding_to_dto(embedding: Embedding, include_vector: bool = True) -> Embed
         model_name="sentence-transformers/all-MiniLM-L6-v2",
         dimension=embedding.vector.shape[0] if embedding.vector is not None else 0,
         created_at=embedding.created_at,
-        vector=vector
+        vector=vector,
+        metadata=embedding.metadata,
+        text=embedding.text
     )
 
 

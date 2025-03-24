@@ -53,12 +53,22 @@ class DatasetService:
 
         saved_dataset = await self.repository.save(dataset)
         
-        # Publicar evento de creación de dataset
         await self._publish_dataset_created_event(saved_dataset)
         
-        # Publicar evento de filas añadidas si hay filas iniciales
+        row_data_with_ids = []
+        for i, saved_row in enumerate(saved_dataset.rows):
+            if i >= len(request.rows):
+                continue
+
+            row_data = request.rows[i].copy()
+            row_data["id"] = str(saved_row.id)
+            row_data_with_ids.append(row_data)
+
         if request.rows and len(request.rows) > 0:
-            await self._publish_rows_added_event(saved_dataset, request.rows)
+            await self._publish_rows_added_event(
+                saved_dataset,
+                row_data_with_ids
+            )
         
         return saved_dataset
 

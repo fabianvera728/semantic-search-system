@@ -44,9 +44,6 @@ class EmbeddingService:
             embedding = await self.embedding_repository.generate_embedding(request)
             await self.embedding_repository.save_embedding(embedding)
             
-            execution_time = time.time() - start_time
-            logger.info(f"Generated embedding for row {request.row_id} in {execution_time:.2f}s")
-            
             return EmbeddingResult(
                 embedding_id=embedding.id,
                 dataset_id=embedding.dataset_id,
@@ -57,7 +54,6 @@ class EmbeddingService:
                 status="success"
             )
         except Exception as e:
-            logger.error(f"Error generating embedding: {str(e)}")
             return EmbeddingResult(
                 embedding_id=UUID(int=0),
                 dataset_id=request.dataset_id,
