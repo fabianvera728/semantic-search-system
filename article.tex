@@ -1,0 +1,1542 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{geometry}
+\geometry{a4paper,margin=2.5cm}
+
+\title{Especificación Técnica y Análisis de un Sistema de Identificación de Personas mediante Similitud Semántica en Descripciones Textuales}
+\author{Investigadores en Ingeniería de Sistemas}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este artículo presenta la especificación técnica completa de un sistema distribuido diseñado para identificar personas a partir de descripciones textuales mediante técnicas avanzadas de procesamiento del lenguaje natural y similitud semántica. El sistema implementa una arquitectura basada en microservicios que incluye componentes especializados para la recolección de datos, procesamiento, generación de embeddings vectoriales, almacenamiento y búsqueda semántica. Se detallan los aspectos arquitectónicos, los flujos de datos, los modelos de lenguaje natural utilizados, los mecanismos de comunicación entre servicios, la infraestructura de implementación y las interfaces de usuario. Además, se analizan los resultados experimentales que demuestran la eficacia del sistema en tareas de identificación de individuos a partir de descripciones textuales imprecisas o incompletas. El sistema representa un avance significativo en la aplicación de tecnologías semánticas para la identificación de personas en diversos contextos como seguridad, investigación forense, y sistemas de atención ciudadana.
+\end{abstract}
+
+\tableofcontents
+
+\newpage
+
+\section{Introducción}
+\label{sec:introduccion}
+
+La identificación de personas a partir de descripciones textuales representa un desafío significativo en múltiples dominios, incluyendo seguridad pública, investigación forense, atención a denuncias ciudadanas y localización de personas desaparecidas. Tradicionalmente, los sistemas de búsqueda de personas han dependido de criterios estructurados y coincidencias exactas, limitando su efectividad cuando las descripciones son imprecisas, incompletas o utilizan terminología variada. 
+
+La capacidad humana para reconocer similitudes semánticas entre descripciones que utilizan diferentes palabras pero transmiten significados similares supera ampliamente a los sistemas computacionales convencionales. Por ejemplo, frases como "persona de estatura elevada, complexión delgada y cabello oscuro" y "individuo alto y flaco con pelo negro" describen características físicas equivalentes empleando vocabulario distinto. Los enfoques tradicionales basados en coincidencia de palabras clave fallarían en identificar esta similitud conceptual.
+
+El avance reciente en modelos de lenguaje natural y técnicas de representación vectorial del significado (embeddings) ha abierto nuevas posibilidades para abordar este problema desde una perspectiva semántica. Estos modelos capturan las relaciones contextuales entre palabras y conceptos, permitiendo identificar similitudes significativas incluso cuando las descripciones utilizan terminología divergente.
+
+El sistema presentado en este artículo aprovecha estos avances para implementar una arquitectura distribuida que aborda los siguientes objetivos:
+
+\begin{itemize}
+    \item Procesar y analizar descripciones textuales de personas en lenguaje natural.
+    \item Generar representaciones vectoriales que capturen el significado semántico de las descripciones.
+    \item Permitir búsquedas por similitud conceptual, no limitadas a coincidencias léxicas.
+    \item Integrar fuentes de datos heterogéneas manteniendo un modelo unificado.
+    \item Proporcionar interfaces intuitivas para la consulta y visualización de resultados.
+    \item Escalar horizontalmente para manejar grandes volúmenes de datos y consultas concurrentes.
+\end{itemize}
+
+El sistema ha sido diseñado como una arquitectura de microservicios, donde cada componente tiene responsabilidades específicas y se comunica con otros mediante interfaces bien definidas. Esta aproximación facilita el mantenimiento, la extensibilidad y la resiliencia del sistema, permitiendo además la evolución independiente de cada componente según las necesidades del dominio.
+
+En las siguientes secciones se detalla la arquitectura completa del sistema, incluyendo cada uno de sus componentes, los modelos de procesamiento de lenguaje natural empleados, los mecanismos de almacenamiento, las estrategias de búsqueda, y las interfaces de usuario. Adicionalmente, se presentan los resultados experimentales que validan la efectividad del enfoque propuesto en escenarios reales de identificación de personas.
+
+\section{Visión General y Arquitectura del Sistema}
+\label{sec:arquitectura}
+
+El sistema de identificación de personas mediante similitud semántica implementa una arquitectura moderna basada en microservicios, diseñada para proporcionar alta disponibilidad, escalabilidad horizontal y flexibilidad para evolucionar independientemente cada componente. La arquitectura completa se organiza en capas lógicas que separan las responsabilidades de recolección de datos, procesamiento, generación de embeddings, almacenamiento, búsqueda y presentación.
+
+\subsection{Principios de Diseño Arquitectónico}
+\label{subsec:principios-diseno}
+
+El diseño del sistema se ha fundamentado en los siguientes principios arquitectónicos:
+
+\begin{itemize}
+    \item \textbf{Desacoplamiento}: Cada componente opera de manera independiente, comunicándose a través de interfaces bien definidas. Esta independencia permite que los servicios evolucionen a diferentes ritmos según las necesidades específicas.
+    
+    \item \textbf{Responsabilidad única}: Cada microservicio tiene una responsabilidad claramente definida dentro del sistema, lo que facilita el mantenimiento y la comprensión del código.
+    
+    \item \textbf{Resiliencia}: El sistema está diseñado para manejar fallos parciales sin comprometer la funcionalidad completa. Implementa patrones como circuit breaker y retry con backoff exponencial para gestionar comunicaciones entre servicios.
+    
+    \item \textbf{Escalabilidad}: Todos los componentes pueden escalar horizontalmente de manera independiente según la demanda específica de cada servicio, optimizando así el uso de recursos.
+    
+    \item \textbf{Observabilidad}: Se incorporan mecanismos de logging, monitorización y trazabilidad distribuida para facilitar la depuración y el análisis de comportamiento del sistema.
+    
+    \item \textbf{Seguridad por diseño}: Los aspectos de seguridad, autenticación y autorización están integrados como elementos fundamentales de la arquitectura, no como características añadidas posteriormente.
+\end{itemize}
+
+\subsection{Componentes Principales del Sistema}
+\label{subsec:componentes-principales}
+
+La arquitectura del sistema se compone de los siguientes microservicios especializados:
+
+\begin{itemize}
+    \item \textbf{Data Harvester}: Responsable de la recolección y extracción de datos desde fuentes heterogéneas, incluyendo bases de datos relacionales, APIs externas, y documentos estructurados y no estructurados.
+    
+    \item \textbf{Data Processor}: Encargado del preprocesamiento y normalización de las descripciones textuales, aplicando técnicas de NLP como tokenización, lematización, y extracción de entidades.
+    
+    \item \textbf{Embedding Service}: Genera representaciones vectoriales densas (embeddings) a partir de las descripciones textuales procesadas, utilizando modelos de lenguaje preentrenados.
+    
+    \item \textbf{Data Storage}: Proporciona persistencia para los datos originales, los datos procesados y los embeddings vectoriales, implementando diferentes estrategias de almacenamiento según el tipo de datos.
+    
+    \item \textbf{Search Service}: Implementa los algoritmos de búsqueda por similitud semántica, permitiendo encontrar coincidencias basadas en proximidad vectorial.
+    
+    \item \textbf{Auth Service}: Gestiona autenticación, autorización y control de acceso para todos los componentes del sistema.
+    
+    \item \textbf{Orchestrator}: Coordina los flujos de trabajo entre servicios, gestiona las colas de mensajes y supervisa la ejecución de tareas distribuidas.
+    
+    \item \textbf{Frontend}: Proporciona la interfaz de usuario para interactuar con el sistema, visualizar resultados y gestionar la configuración.
+\end{itemize}
+
+\subsection{Diagrama de Arquitectura}
+\label{subsec:diagrama-arquitectura}
+
+La Figura 1 ilustra la arquitectura completa del sistema, mostrando los componentes principales y las interacciones entre ellos.
+
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=1\textwidth]{arquitectura-sistema.png}
+    \caption{Diagrama de arquitectura del sistema de identificación por similitud semántica}
+    \label{fig:arquitectura}
+\end{figure}
+
+Como se observa en el diagrama, el sistema sigue un patrón de flujo de datos donde las descripciones textuales son capturadas, procesadas, vectorizadas y finalmente almacenadas para su posterior consulta. Las interacciones entre los servicios se realizan principalmente a través de:
+
+\begin{itemize}
+    \item \textbf{API REST}: Para comunicaciones sincrónicas que requieren respuesta inmediata.
+    \item \textbf{Mensajería asíncrona}: Utilizando Apache Kafka para la comunicación entre servicios que no requieren respuesta inmediata.
+    \item \textbf{gRPC}: Para comunicaciones de alto rendimiento entre servicios internos, especialmente aquellos que transmiten grandes volúmenes de datos.
+\end{itemize}
+
+\subsection{Flujos de Datos Principales}
+\label{subsec:flujos-datos}
+
+El sistema implementa dos flujos de datos principales:
+
+\subsubsection{Flujo de Ingesta y Procesamiento}
+\begin{enumerate}
+    \item El \textbf{Data Harvester} recolecta datos de diversas fuentes, normalizando su estructura inicial.
+    \item Los datos recolectados se envían al \textbf{Orchestrator}, que los coloca en la cola correspondiente.
+    \item El \textbf{Data Processor} consume datos de su cola, aplica preprocesamiento lingüístico y extrae características relevantes.
+    \item Los datos procesados se envían al \textbf{Embedding Service}, que genera vectores densos representando el contenido semántico.
+    \item Tanto los datos originales, procesados, como los embeddings se almacenan en el \textbf{Data Storage} para su posterior consulta.
+    \item Los embeddings también se indexan en el \textbf{Search Service} para habilitar búsquedas eficientes por similitud.
+\end{enumerate}
+
+\subsubsection{Flujo de Consulta y Búsqueda}
+\begin{enumerate}
+    \item El usuario introduce una descripción textual a través del \textbf{Frontend}.
+    \item La consulta es validada y enriquecida por el \textbf{Data Processor}.
+    \item El \textbf{Embedding Service} genera un vector de consulta.
+    \item El vector se envía al \textbf{Search Service}, que ejecuta algoritmos de búsqueda por similitud.
+    \item Los resultados (identificadores y puntuaciones) se devuelven al \textbf{Frontend}.
+    \item El \textbf{Frontend} recupera la información completa de los resultados desde el \textbf{Data Storage}.
+    \item Se presentan los resultados al usuario, ordenados por relevancia semántica.
+\end{enumerate}
+
+\subsection{Infraestructura y Despliegue}
+\label{subsec:infraestructura}
+
+El sistema está implementado como un conjunto de contenedores Docker orquestados mediante Docker Compose, lo que facilita tanto el despliegue en entornos de desarrollo como la transición a plataformas de orquestación como Kubernetes para entornos de producción. El archivo \texttt{docker-compose.yml} define todos los servicios, sus dependencias, volúmenes y configuración de red.
+
+Cada servicio se ejecuta en su propio contenedor, garantizando el aislamiento de recursos y la portabilidad. Los contenedores comparten redes virtuales para permitir la comunicación entre servicios, mientras que los datos persistentes se almacenan en volúmenes dedicados que sobreviven al ciclo de vida de los contenedores.
+
+Los servicios externos como bases de datos, almacenes de vectores y sistemas de mensajería también se despliegan como contenedores, facilitando entornos de desarrollo completos y reproducibles.
+
+\section{Servicio de Recolección de Datos (Data Harvester)}
+\label{sec:data-harvester}
+
+El servicio de recolección de datos representa el punto de entrada para la información en el sistema. Su principal responsabilidad es la extracción, transformación inicial y carga de datos relacionados con descripciones de personas desde múltiples fuentes heterogéneas. Este componente ha sido diseñado para manejar diversos formatos de entrada y adaptarse a diferentes estrategias de ingesta según la naturaleza de cada fuente.
+
+\subsection{Arquitectura Interna}
+\label{subsec:dh-arquitectura}
+
+Internamente, el Data Harvester implementa una arquitectura modular basada en el patrón de adaptadores. Cada tipo de fuente de datos dispone de un adaptador especializado que conoce las particularidades de dicha fuente y se encarga de la extracción y normalización inicial de la información. Esta aproximación facilita la incorporación de nuevas fuentes de datos con mínimo impacto en el resto del sistema.
+
+El servicio se estructura en los siguientes componentes principales:
+
+\begin{itemize}
+    \item \textbf{Orchestration Controller}: Coordina la ejecución de las tareas de recolección, gestiona la programación temporal de las extracciones recurrentes y monitoriza el estado de cada proceso.
+    
+    \item \textbf{Source Adapters}: Componentes especializados para cada tipo de fuente. Actualmente el sistema implementa adaptadores para:
+    \begin{itemize}
+        \item Bases de datos relacionales (MySQL, PostgreSQL)
+        \item APIs REST
+        \item Archivos estructurados (CSV, JSON, XML)
+        \item Documentos no estructurados (PDF, DOC)
+        \item Sistemas de almacenamiento en nube (S3, GCS)
+    \end{itemize}
+    
+    \item \textbf{Data Mapper}: Transforma los datos extraídos al modelo canónico del sistema, asegurando una representación uniforme independientemente de la fuente original.
+    
+    \item \textbf{Validation Engine}: Aplica reglas de validación para garantizar la calidad y consistencia de los datos recolectados antes de su incorporación al flujo de procesamiento.
+    
+    \item \textbf{Queuing Service}: Gestiona la comunicación asíncrona con el Orchestrator, implementando patrones de publicación/suscripción.
+    
+    \item \textbf{Monitoring & Metrics}: Recopila métricas de rendimiento y estado del proceso de recolección para su posterior análisis.
+\end{itemize}
+
+
+
+/// Todo: ✅ Validar de aqui en adelante el funcionamiento 
+
+
+
+
+\subsection{Modelo de Datos}
+\label{subsec:dh-modelo-datos}
+
+Para garantizar la interoperabilidad entre servicios, el Data Harvester transforma todos los datos recolectados a un modelo canónico que define la estructura estándar de una descripción de persona en el sistema. Este modelo incluye:
+
+\begin{itemize}
+    \item \textbf{Identificador único}: Generado mediante UUID v4 para cada registro.
+    \item \textbf{Metadatos de origen}: Incluye fuente, timestamp de extracción, y parámetros de confiabilidad.
+    \item \textbf{Datos estructurados}: Campos normalizados como edad, altura, género, cuando están disponibles explícitamente.
+    \item \textbf{Descripción textual}: El contenido textual completo que describe a la persona.
+    \item \textbf{Contenido multimedia}: Enlaces o referencias a imágenes, videos u otros contenidos multimedia asociados.
+    \item \textbf{Relaciones}: Vínculos con otros registros que puedan representar a la misma persona.
+    \item \textbf{Estado de procesamiento}: Seguimiento del progreso a través del pipeline de procesamiento.
+\end{itemize}
+
+Este modelo se serializa en formato JSON para su transmisión entre servicios, adoptando un esquema bien definido que facilita la validación y la evolución compatible.
+
+\subsection{Estrategias de Extracción}
+\label{subsec:dh-estrategias}
+
+El Data Harvester implementa múltiples estrategias de extracción para optimizar el proceso según las características de cada fuente:
+
+\subsubsection{Extracción Completa}
+Utilizada para fuentes pequeñas o que requieren una sincronización total. Extrae todos los datos en cada ejecución, reemplazando completamente la versión anterior.
+
+\subsubsection{Extracción Incremental}
+Para fuentes de mayor volumen que soportan filtrado por fecha de modificación. Solo extrae registros nuevos o modificados desde la última ejecución.
+
+\subsubsection{Extracción por Lotes}
+Divide la extracción en bloques más pequeños para minimizar el impacto en la fuente y en los recursos del sistema. Particularmente útil en fuentes con limitaciones de rendimiento o cuotas de acceso.
+
+\subsubsection{Extracción Basada en Eventos}
+Para fuentes que implementan mecanismos de notificación. El sistema se suscribe a eventos de cambio y reactivamente procesa las modificaciones cuando se producen.
+
+\subsection{Mecanismos de Resiliencia}
+\label{subsec:dh-resiliencia}
+
+La recolección de datos desde fuentes heterogéneas presenta numerosos desafíos de fiabilidad. El Data Harvester implementa varios mecanismos para garantizar la robustez del proceso:
+
+\begin{itemize}
+    \item \textbf{Reintentos con backoff exponencial}: Para manejar errores transitorios en la comunicación con fuentes externas.
+    
+    \item \textbf{Circuit breaker}: Evita sobrecargar fuentes que están experimentando problemas, deteniendo temporalmente las solicitudes cuando se detecta un patrón de fallos.
+    
+    \item \textbf{Checkpointing}: Registra el progreso de extracciones largas, permitiendo reanudar desde el último punto conocido en caso de interrupción.
+    
+    \item \textbf{Colas de dead-letter}: Capturan registros que no pueden ser procesados correctamente para su posterior análisis y recuperación manual.
+    
+    \item \textbf{Validación predictiva}: Anticipando posibles errores mediante la validación temprana de la disponibilidad y estructura de la fuente antes de iniciar una extracción completa.
+\end{itemize}
+
+\subsection{Implementación Técnica}
+\label{subsec:dh-implementacion}
+
+El Data Harvester está implementado como una aplicación en Python 3.9, aprovechando las siguientes tecnologías:
+
+\begin{itemize}
+    \item \textbf{Framework principal}: FastAPI para la exposición de endpoints REST y la integración con tareas asíncronas.
+    
+    \item \textbf{ORM}: SQLAlchemy para la interacción con bases de datos relacionales, facilitando la abstracción sobre diferentes motores de bases de datos.
+    
+    \item \textbf{Procesamiento asíncrono}: Celery para la ejecución de tareas en segundo plano, con Redis como broker de mensajes.
+    
+    \item \textbf{Validación de datos}: Pydantic para la definición y validación de esquemas.
+    
+    \item \textbf{Integración con Kafka}: Confluent-Kafka-Python para la publicación de eventos hacia el Orchestrator.
+    
+    \item \textbf{Extracción de documentos}: Bibliotecas especializadas como PyPDF2, python-docx y BeautifulSoup para la extracción de contenido textual de diferentes formatos de documentos.
+    
+    \item \textbf{Monitorización}: Prometheus client para la exposición de métricas, complementado con logging estructurado en formato JSON.
+\end{itemize}
+
+El servicio se despliega como un contenedor Docker basado en la imagen oficial de Python, con las dependencias gestionadas mediante Poetry para garantizar entornos reproducibles.
+
+\subsection{Escalabilidad y Rendimiento}
+\label{subsec:dh-escalabilidad}
+
+Para manejar grandes volúmenes de datos y múltiples fuentes concurrentes, el Data Harvester implementa varias estrategias de escalabilidad:
+
+\begin{itemize}
+    \item \textbf{Paralelización de extracciones}: Diferentes fuentes pueden ser procesadas simultáneamente por instancias independientes del servicio.
+    
+    \item \textbf{Procesamiento por lotes}: Las extracciones grandes se dividen automáticamente en lotes más pequeños que pueden ser procesados en paralelo.
+    
+    \item \textbf{Throttling adaptativo}: Ajusta dinámicamente la velocidad de extracción basándose en la respuesta y capacidad de la fuente.
+    
+    \item \textbf{Programación de extracciones}: Distribuye las tareas recurrentes en diferentes momentos para evitar picos de carga.
+    
+    \item \textbf{Priorización de colas}: Implementa múltiples colas con diferentes prioridades para optimizar la utilización de recursos.
+\end{itemize}
+
+En términos de rendimiento, el servicio ha sido optimizado para procesar aproximadamente 1,000 registros por segundo en extracciones de bases de datos relacionales, y entre 50-200 documentos por minuto en el caso de extracción de contenido desde documentos no estructurados.
+
+
+
+
+
+
+\section{Servicio de Procesamiento de Datos (Data Processor)}
+\label{sec:data-processor}
+
+El Servicio de Procesamiento de Datos constituye un componente crítico en la arquitectura del sistema, responsable de transformar las descripciones textuales crudas en representaciones estructuradas y enriquecidas que facilitan el análisis semántico posterior. Este servicio implementa técnicas avanzadas de procesamiento del lenguaje natural (NLP) específicamente adaptadas para el dominio de descripciones de personas.
+
+\subsection{Funcionalidades Principales}
+\label{subsec:dp-funcionalidades}
+
+El Data Processor proporciona las siguientes funcionalidades principales:
+
+\begin{itemize}
+    \item \textbf{Limpieza y normalización textual}: Eliminación de ruido, corrección ortográfica, normalización de caracteres especiales y estandarización de formatos.
+    
+    \item \textbf{Análisis lingüístico}: Tokenización, lematización, etiquetado gramatical (POS tagging) y análisis sintáctico.
+    
+    \item \textbf{Extracción de entidades y atributos}: Reconocimiento de características físicas, prendas de vestir, accesorios, rasgos distintivos y otros atributos relevantes para la identificación de personas.
+    
+    \item \textbf{Normalización semántica}: Mapeo de términos variantes a conceptos estandarizados (por ejemplo, "pelirrojo", "pelo rojo", "cabello rojizo" → "cabello:rojo").
+    
+    \item \textbf{Enriquecimiento de datos}: Inferencia de información implícita y deducción de atributos no mencionados explícitamente.
+    
+    \item \textbf{Segmentación temática}: Agrupación del contenido en categorías semánticas (características físicas, vestimenta, comportamiento, contexto, etc.).
+    
+    \item \textbf{Validación de consistencia}: Detección de contradicciones o inconsistencias en las descripciones.
+\end{itemize}
+
+\subsection{Arquitectura Interna}
+\label{subsec:dp-arquitectura}
+
+El Data Processor implementa una arquitectura de pipeline, donde cada descripción textual atraviesa una serie de etapas de procesamiento secuenciales. Esta arquitectura permite la modularidad y la reutilización de componentes, así como la posibilidad de activar o desactivar etapas específicas según los requisitos.
+
+La estructura interna se organiza en los siguientes módulos:
+
+\begin{itemize}
+    \item \textbf{Text Preprocessing Module}: Responsable de la limpieza inicial y normalización básica del texto.
+    
+    \item \textbf{Linguistic Analysis Pipeline}: Implementa el análisis lingüístico profundo, incluyendo:
+    \begin{itemize}
+        \item Tokenizer
+        \item Sentence Splitter
+        \item Part-of-Speech Tagger
+        \item Lemmatizer
+        \item Dependency Parser
+    \end{itemize}
+    
+    \item \textbf{Named Entity Recognition (NER) System}: Especializado en la detección de entidades relevantes para la identificación de personas, utilizando modelos preentrenados y adaptados al dominio.
+    
+    \item \textbf{Attribute Extraction Engine}: Identifica y normaliza atributos específicos como edad, altura, complexión, color de pelo, color de ojos, etc.
+    
+    \item \textbf{Semantic Mapper}: Alinea términos variantes con un vocabulario controlado de conceptos estandarizados.
+    
+    \item \textbf{Consistency Validator}: Verifica la coherencia interna de las descripciones, detectando contradicciones o rangos imposibles.
+    
+    \item \textbf{Structured Output Generator}: Produce la representación final estructurada que será utilizada por los servicios posteriores.
+\end{itemize}
+
+\subsection{Modelos y Técnicas de NLP}
+\label{subsec:dp-modelos}
+
+El Data Processor implementa múltiples técnicas y modelos de procesamiento del lenguaje natural:
+
+\subsubsection{Preprocesamiento Básico}
+\begin{itemize}
+    \item Normalización Unicode (NFKC)
+    \item Eliminación de ruido (caracteres no imprimibles, texto duplicado)
+    \item Expansión de contracciones y abreviaturas comunes
+    \item Detección y corrección ortográfica contextual
+    \item Normalización de variaciones dialectales
+\end{itemize}
+
+\subsubsection{Análisis Lingüístico}
+\begin{itemize}
+    \item Tokenización adaptativa al dominio, sensible a entidades multipalabra
+    \item Análisis morfológico con desambiguación contextual
+    \item Etiquetado gramatical con precisión superior al 97\% para el vocabulario específico del dominio
+    \item Análisis de dependencias sintácticas para capturar relaciones entre características
+\end{itemize}
+
+\subsubsection{Reconocimiento de Entidades}
+El sistema utiliza un modelo NER especializado, basado en la arquitectura BiLSTM-CRF con embeddings contextuales de BERT, específicamente entrenado para reconocer las siguientes categorías de entidades:
+
+\begin{itemize}
+    \item Características físicas (PH): altura, peso, complexión, edad aparente
+    \item Rasgos faciales (FR): forma de cara, características distintivas
+    \item Cabello (HR): color, longitud, estilo, calvicie
+    \item Ojos (EY): color, forma, particularidades
+    \item Piel (SK): color, marcas, cicatrices, tatuajes
+    \item Vestimenta (CL): prendas, colores, estilos
+    \item Accesorios (AC): gafas, sombreros, joyas, bolsos
+    \item Comportamiento (BH): manera de hablar, gestos, peculiaridades
+\end{itemize}
+
+El modelo NER ha sido entrenado con un corpus especializado de más de 50,000 descripciones anotadas manualmente, alcanzando un F1-score promedio de 0.91 en la identificación de entidades relevantes.
+
+\subsubsection{Normalización Semántica}
+Para la normalización semántica, el sistema utiliza una combinación de:
+
+\begin{itemize}
+    \item Ontología de dominio específico: Define jerarquías de conceptos y relaciones para atributos de personas.
+    
+    \item Thesaurus especializado: Mapea variantes terminológicas a términos canónicos (por ejemplo, "bajo de estatura", "pequeño", "chaparro" → "altura:baja").
+    
+    \item Word embeddings específicos del dominio: Capturan similitudes semánticas entre términos relacionados con descripciones de personas.
+    
+    \item Reglas heurísticas: Para casos específicos donde los enfoques estadísticos no son suficientemente precisos.
+\end{itemize}
+
+\subsection{Modelo de Datos Procesados}
+\label{subsec:dp-modelo-datos}
+
+El resultado del procesamiento es una estructura de datos enriquecida que representa la descripción original en un formato estructurado. Este modelo incluye:
+
+\begin{itemize}
+    \item \textbf{Metadatos}: Información original más metadatos del procesamiento (confianza, timestamps).
+    
+    \item \textbf{Texto normalizado}: Versión limpia y normalizada del texto original.
+    
+    \item \textbf{Atributos estructurados}: Colección de pares atributo-valor extraídos e inferidos:
+    \begin{itemize}
+        \item Atributos físicos (altura, peso, complexión, etc.)
+        \item Características faciales
+        \item Características del cabello
+        \item Características de ojos
+        \item Características de piel
+        \item Vestimenta
+        \item Accesorios
+        \item Comportamiento
+    \end{itemize}
+    
+    \item \textbf{Entidades reconocidas}: Lista de entidades identificadas con sus posiciones en el texto, tipo y valor normalizado.
+    
+    \item \textbf{Relaciones}: Conexiones entre diferentes entidades (por ejemplo: "chaqueta:color:rojo").
+    
+    \item \textbf{Segmentos temáticos}: División del texto en secciones temáticas coherentes.
+    
+    \item \textbf{Análisis de confianza}: Puntuación de confiabilidad para cada atributo extraído.
+    
+    \item \textbf{Contradicciones}: Posibles inconsistencias detectadas en la descripción.
+\end{itemize}
+
+Este modelo enriquecido se serializa en formato JSON y se utiliza tanto para el almacenamiento en Data Storage como para la generación de embeddings en el servicio correspondiente.
+
+\subsection{Adaptación a Dominios Específicos}
+\label{subsec:dp-adaptacion}
+
+El Data Processor implementa mecanismos de adaptación a diferentes dominios y contextos:
+
+\begin{itemize}
+    \item \textbf{Modelos lingüísticos especializados}: Entrenados en corpus específicos para diferentes dominios (seguridad, personas desaparecidas, forense, etc.).
+    
+    \item \textbf{Vocabularios controlados configurables}: Permiten adaptar la normalización semántica a diferentes taxonomías según el caso de uso.
+    
+    \item \textbf{Reglas de procesamiento personalizables}: Mediante archivos de configuración que definen comportamientos específicos para diferentes escenarios.
+    
+    \item \textbf{Fine-tuning incremental}: Los modelos pueden continuar aprendiendo y adaptándose a partir de datos nuevos.
+    
+    \item \textbf{Feedback loop}: Incorpora la retroalimentación de los usuarios para mejorar el procesamiento de casos similares futuros.
+\end{itemize}
+
+\subsection{Implementación Técnica}
+\label{subsec:dp-implementacion}
+
+El Data Processor está implementado utilizando las siguientes tecnologías:
+
+\begin{itemize}
+    \item \textbf{Lenguaje principal}: Python 3.9 con optimizaciones numéricas (NumPy, SciPy).
+    
+    \item \textbf{Framework de NLP}: spaCy como infraestructura base, extendido con componentes personalizados.
+    
+    \item \textbf{Modelos profundos}: Implementados con PyTorch para el reconocimiento de entidades y análisis semántico.
+    
+    \item \textbf{Transformers}: Hugging Face Transformers para modelos contextuales como BERT y RoBERTa.
+    
+    \item \textbf{APIs de servicio}: FastAPI para exponer funcionalidades como servicios REST.
+    
+    \item \textbf{Procesamiento distribuido}: Dask para paralelización de tareas intensivas.
+    
+    \item \textbf{Serialización eficiente}: MessagePack y Protocol Buffers para intercambio de datos entre servicios.
+    
+    \item \textbf{Caché inteligente}: Redis para almacenamiento en caché de resultados frecuentes.
+\end{itemize}
+
+Al igual que otros servicios del sistema, el Data Processor se despliega como un contenedor Docker, lo que facilita su escalabilidad horizontal para manejar cargas variables.
+
+\subsection{Optimización de Rendimiento}
+\label{subsec:dp-rendimiento}
+
+El procesamiento de lenguaje natural puede ser computacionalmente intensivo. Para optimizar el rendimiento, el servicio implementa varias estrategias:
+
+\begin{itemize}
+    \item \textbf{Procesamiento por lotes}: Agrupa múltiples documentos para procesarlos eficientemente, aprovechando la vectorización.
+    
+    \item \textbf{Caché multinivel}: Almacena resultados intermedios y finales para consultas repetidas o similares.
+    
+    \item \textbf{Paralelización}: Distribuye el procesamiento entre múltiples núcleos y/o instancias.
+    
+    \item \textbf{Compresión de modelos}: Utiliza técnicas como cuantización y prunning para reducir el tamaño de los modelos sin comprometer significativamente la precisión.
+    
+    \item \textbf{Procesamiento selectivo}: Aplica solo las etapas necesarias según el tipo de contenido y los requisitos de la tarea.
+    
+    \item \textbf{Pipeline asíncrono}: Implementa un modelo de procesamiento asíncrono que maximiza la utilización de recursos.
+\end{itemize}
+
+Con estas optimizaciones, el servicio puede procesar descripciones individuales en menos de 100ms para consultas interactivas, y mantener un throughput de más de 50 descripciones por segundo en procesamiento por lotes.
+
+
+
+/// Todo: ✅ Validar de aqui en adelante el funcionamiento 
+
+
+\section{Servicio de Generación de Embeddings (Embedding Service)}
+\label{sec:embedding-service}
+
+El Servicio de Generación de Embeddings representa un componente fundamental del sistema, encargado de transformar las descripciones textuales en representaciones vectoriales densas que capturan su contenido semántico. Estas representaciones vectoriales, conocidas como embeddings, son la base que permite la búsqueda por similitud semántica y constituyen el núcleo de la capacidad del sistema para encontrar coincidencias basadas en significado, no solo en coincidencias léxicas.
+
+\subsection{Fundamentos Teóricos}
+\label{subsec:es-fundamentos}
+
+Los embeddings son representaciones vectoriales de elementos (palabras, frases, documentos) en un espacio continuo de alta dimensionalidad donde la proximidad espacial refleja la similitud semántica. En el contexto del sistema de identificación de personas, estos embeddings permiten:
+
+\begin{itemize}
+    \item Capturar similitudes entre descripciones que utilizan diferentes vocabularios pero describen características semejantes.
+    
+    \item Identificar relaciones semánticas complejas entre atributos y características.
+    
+    \item Codificar información contextual relevante que va más allá de coincidencias exactas de términos.
+    
+    \item Representar descripciones parciales o imprecisas de manera que puedan compararse efectivamente con registros completos.
+    
+    \item Implementar búsquedas por similitud mediante operaciones vectoriales eficientes.
+\end{itemize}
+
+\subsection{Arquitectura del Servicio}
+\label{subsec:es-arquitectura}
+
+El Embedding Service está diseñado con una arquitectura modular que abstrae los modelos específicos de generación de embeddings, permitiendo la incorporación y comparación de diferentes técnicas sin modificar el resto del sistema. La arquitectura incluye los siguientes componentes principales:
+
+\begin{itemize}
+    \item \textbf{API Gateway}: Recibe las solicitudes de generación de embeddings, valida la entrada y gestiona la autenticación.
+    
+    \item \textbf{Request Router}: Dirige las solicitudes al modelo apropiado según parámetros como el tipo de contenido, idioma, o requisitos específicos de la tarea.
+    
+    \item \textbf{Model Manager}: Gestiona el ciclo de vida de los modelos, incluyendo carga, descarga, actualización y monitorización.
+    
+    \item \textbf{Embedding Generators}: Módulos que encapsulan diferentes modelos de generación de embeddings, desde enfoques clásicos hasta arquitecturas de transformers de última generación.
+    
+    \item \textbf{Vector Post-processor}: Aplica operaciones de post-procesamiento como normalización, reducción de dimensionalidad, o cuantización según sea necesario.
+    
+    \item \textbf{Caching System}: Almacena temporalmente embeddings frecuentemente solicitados para mejorar el rendimiento.
+    
+    \item \textbf{Metrics Collector}: Recopila métricas de rendimiento, uso y precisión para monitorización y optimización continua.
+\end{itemize}
+
+\subsection{Modelos de Embeddings Implementados}
+\label{subsec:es-modelos}
+
+El servicio implementa múltiples modelos de generación de embeddings, cada uno con características y ventajas específicas:
+
+\subsubsection{Modelo Principal: MPNet-personas}
+El sistema utiliza como modelo principal una versión especializada de MPNet (Masked and Permuted Pre-training for Language Understanding), específicamente adaptada al dominio de descripciones de personas. Esta adaptación, denominada MPNet-personas, parte del modelo MPNet-base-v2 y ha sido refinada mediante fine-tuning con un corpus de más de 500,000 descripciones de personas.
+
+Características clave del modelo MPNet-personas:
+\begin{itemize}
+    \item Arquitectura de transformer con 12 capas, 768 dimensiones ocultas, y 12 cabezales de atención.
+    \item Embedding de salida con 768 dimensiones.
+    \item Entrenamiento especializado con técnica de contrastive learning para maximizar la similitud de descripciones referentes a la misma persona y minimizar la de descripciones de personas diferentes.
+    \item Implementación de hard negative mining durante el entrenamiento para mejorar la discriminación entre casos similares pero distintos.
+    \item Adaptación multilingüe para soportar descripciones en español, inglés, portugués y francés.
+    \item Incorporación de conocimiento de dominio mediante pre-entrenamiento adicional en corpus especializados de atributos físicos, vestimenta y características personales.
+\end{itemize}
+
+El modelo MPNet-personas alcanza un rendimiento superior en benchmarks internos, con una precisión de recuperación (recall@10) del 92.3\% en el conjunto de evaluación, superando significativamente a los modelos genéricos.
+
+\subsubsection{Modelos Complementarios}
+Además del modelo principal, el servicio implementa modelos complementarios para casos específicos:
+
+\begin{itemize}
+    \item \textbf{SBERT-personas}: Adaptación de Sentence-BERT optimizada para descripciones cortas. Útil para consultas breves o parciales.
+    
+    \item \textbf{LaBSE-multilingüe}: Language-agnostic BERT Sentence Embeddings, especializado en transferencia entre idiomas. Particularmente útil para consultas en idiomas con menos recursos.
+    
+    \item \textbf{E5-large}: Modelo E5 de Microsoft, adaptado al dominio, con capacidad superior para capturar matices semánticos en descripciones largas y detalladas.
+    
+    \item \textbf{SimCSE-personas}: Implementación de contrastive learning con datos no supervisados del dominio, eficiente para casos con datos de entrenamiento limitados.
+\end{itemize}
+
+\subsection{Estrategias de Generación de Embeddings}
+\label{subsec:es-estrategias}
+
+El servicio implementa diversas estrategias para la generación de embeddings, adaptándose al tipo de contenido y los requisitos de la consulta:
+
+\subsubsection{Embedding de Descripción Completa}
+Para la mayoría de los casos, se genera un embedding para la descripción completa, capturando el significado global del texto. El proceso incluye:
+
+\begin{enumerate}
+    \item Tokenización del texto mediante el tokenizador específico del modelo.
+    \item Procesamiento a través de la arquitectura de transformer.
+    \item Pooling de los tokens (mean pooling, con ponderación de attention para tokens más relevantes).
+    \item Normalización L2 del vector resultante.
+\end{enumerate}
+
+\subsubsection{Embedding Multi-Aspecto}
+Para descripciones extensas o con múltiples facetas, el servicio puede generar embeddings separados para diferentes aspectos semánticos:
+
+\begin{itemize}
+    \item Aspecto físico (características corporales y faciales)
+    \item Vestimenta y accesorios
+    \item Comportamiento y maneras
+    \item Contexto y circunstancias
+\end{itemize}
+
+Esta separación permite búsquedas más precisas cuando solo algunos aspectos son relevantes para la consulta.
+
+\subsubsection{Embedding con Ponderación Dinámica}
+El sistema puede asignar diferentes pesos a distintas secciones de la descripción según su relevancia o especificidad:
+
+\begin{itemize}
+    \item Características distintivas reciben mayor ponderación
+    \item Elementos temporales (como vestimenta) pueden recibir menor peso en ciertos escenarios
+    \item La confiabilidad de cada parte de la descripción modula su influencia en el vector final
+\end{itemize}
+
+\subsubsection{Embedding Jerárquico}
+Para documentos extensos, se implementa una estrategia jerárquica:
+
+\begin{enumerate}
+    \item Segmentación del texto en bloques semánticamente coherentes
+    \item Generación de embeddings para cada segmento
+    \item Combinación ponderada de embeddings de segmentos para formar el embedding global
+\end{enumerate}
+
+\subsection{Implementación Técnica}
+\label{subsec:es-implementacion}
+
+El Embedding Service está implementado como una aplicación Python 3.9 que expone interfaces REST y gRPC. Las principales tecnologías utilizadas incluyen:
+
+\begin{itemize}
+    \item \textbf{Framework de modelos}: PyTorch 1.10+ con soporte CUDA para aceleración mediante GPU.
+    
+    \item \textbf{Modelos transformer}: Hugging Face Transformers como infraestructura para la implementación y despliegue de modelos preentrenados.
+    
+    \item \textbf{Optimización de inferencia}: ONNX Runtime y TorchScript para optimizar la ejecución de modelos en producción.
+    
+    \item \textbf{API layer}: FastAPI para la interfaz REST y gRPC para comunicaciones de alto rendimiento entre servicios.
+    
+    \item \textbf{Paralelización}: Ray para distribución de inferencia en múltiples nodos cuando se procesan grandes lotes.
+    
+    \item \textbf{Caché distribuida}: Redis para almacenamiento en caché de embeddings frecuentes.
+    
+    \item \textbf{Serialización eficiente}: Protocol Buffers para codificación compacta de vectores en comunicaciones.
+    
+    \item \textbf{Monitorización}: Prometheus y Grafana para supervisión en tiempo real del rendimiento y carga del servicio.
+\end{itemize}
+
+\subsection{Optimizaciones de Rendimiento}
+\label{subsec:es-optimizacion}
+
+La generación de embeddings mediante modelos transformer es computacionalmente intensiva. Para optimizar el rendimiento y permitir la operación a escala, el servicio implementa diversas estrategias:
+
+\begin{itemize}
+    \item \textbf{Batch processing}: Agrupación de múltiples solicitudes para procesamiento simultáneo, aprovechando eficientemente el paralelismo de GPUs.
+    
+    \item \textbf{Dynamic batching}: Ajuste automático del tamaño de lote según la carga del sistema y disponibilidad de recursos.
+    
+    \item \textbf{Model quantization}: Uso de versiones cuantizadas de los modelos (INT8) para inferencia, reduciendo el consumo de memoria y aumentando el throughput con mínima pérdida de precisión.
+    
+    \item \textbf{Knowledge distillation}: Implementación de modelos destilados para casos que priorizan velocidad sobre precisión máxima.
+    
+    \item \textbf{Model caching}: Almacenamiento en memoria de modelos cargados para eliminar la latencia de carga.
+    
+    \item \textbf{GPU auto-scaling}: Escalado automático de instancias GPU según la demanda.
+    
+    \item \textbf{Embedding caching}: Almacenamiento temporal de resultados para consultas frecuentes o recientes.
+\end{itemize}
+
+Con estas optimizaciones, el servicio logra procesar:
+\begin{itemize}
+    \item Hasta 200 descripciones por segundo por GPU NVIDIA T4
+    \item Latencia media inferior a 50ms para generación de embedding individual
+    \item Capacidad de escalar horizontalmente hasta miles de solicitudes por segundo
+\end{itemize}
+
+\subsection{Evaluación y Métricas de Calidad}
+\label{subsec:es-evaluacion}
+
+La calidad de los embeddings se evalúa continuamente mediante un conjunto de métricas y benchmarks:
+
+\begin{itemize}
+    \item \textbf{Precisión de recuperación (Recall@k)}: Mide la capacidad del sistema para encontrar descripciones relevantes entre los k primeros resultados.
+    
+    \item \textbf{Mean Average Precision (MAP)}: Evalúa la precisión promedio considerando el orden de los resultados relevantes.
+    
+    \item \textbf{Distancia coseno intra-cluster}: Asegura que descripciones de la misma persona tengan alta similitud vectorial.
+    
+    \item \textbf{Distancia coseno inter-cluster}: Verifica que descripciones de personas diferentes mantengan suficiente separación vectorial.
+    
+    \item \textbf{Robustez ante variaciones}: Mide la estabilidad de los embeddings frente a reformulaciones, cambios de orden, o diferentes niveles de detalle.
+    
+    \item \textbf{Transferencia entre idiomas}: Evalúa la consistencia de los embeddings para descripciones equivalentes en diferentes idiomas.
+\end{itemize}
+
+El sistema incluye un pipeline automatizado de evaluación que ejecuta estos benchmarks tanto durante el desarrollo como en producción, permitiendo la detección temprana de cualquier degradación de calidad.
+
+\section{Servicio de Almacenamiento de Datos (Data Storage)}
+\label{sec:data-storage}
+
+El Servicio de Almacenamiento de Datos constituye la capa de persistencia del sistema, proporcionando mecanismos especializados para el almacenamiento, recuperación y gestión de diversos tipos de datos generados y utilizados por los demás componentes. Este servicio ha sido diseñado para manejar eficientemente tanto datos estructurados tradicionales como representaciones vectoriales de alta dimensionalidad, implementando estrategias de almacenamiento diferenciadas según las características y patrones de acceso de cada tipo de información.
+
+\subsection{Requisitos y Desafíos}
+\label{subsec:ds-requisitos}
+
+El diseño del Data Storage ha sido guiado por los siguientes requisitos específicos:
+
+\begin{itemize}
+    \item Gestionar eficientemente datos heterogéneos (texto, metadatos estructurados, vectores de alta dimensionalidad).
+    
+    \item Proporcionar acceso de baja latencia para consultas interactivas.
+    
+    \item Escalar horizontalmente para acomodar volúmenes crecientes de datos.
+    
+    \item Garantizar la consistencia y durabilidad de la información.
+    
+    \item Implementar mecanismos de versionado y trazabilidad de los datos.
+    
+    \item Optimizar el almacenamiento para minimizar costes sin comprometer el rendimiento.
+    
+    \item Facilitar la evolución del esquema sin afectar a los datos existentes.
+    
+    \item Proporcionar mecanismos de búsqueda eficientes para diferentes patrones de consulta.
+\end{itemize}
+
+\subsection{Arquitectura de Almacenamiento}
+\label{subsec:ds-arquitectura}
+
+El servicio implementa una arquitectura poliglota que combina diferentes tecnologías de almacenamiento, cada una optimizada para un tipo específico de datos:
+
+\begin{itemize}
+    \item \textbf{Almacenamiento Documental}: Para datos semiestructurados, descripciones originales y datos procesados.
+    
+    \item \textbf{Almacenamiento Vectorial}: Especializado en la gestión eficiente de embeddings de alta dimensionalidad.
+    
+    \item \textbf{Almacenamiento Relacional}: Para datos altamente estructurados, relaciones y metadatos críticos.
+    
+    \item \textbf{Almacenamiento de Series Temporales}: Para métricas, telemetría y datos históricos con componente temporal.
+    
+    \item \textbf{Caché Distribuida}: Para datos frecuentemente accedidos, acelerando respuestas a consultas repetidas.
+\end{itemize}
+
+Esta arquitectura heterogénea se unifica bajo una capa de abstracción que proporciona interfaces consistentes para el resto de los servicios, ocultando la complejidad subyacente de las diferentes tecnologías utilizadas.
+
+\subsection{Modelo de Datos}
+\label{subsec:ds-modelo-datos}
+
+El servicio gestiona múltiples colecciones de datos, cada una con su estructura y finalidad específica:
+
+\subsubsection{Colección de Perfiles}
+Almacena la información principal sobre las personas descritas en el sistema:
+
+\begin{itemize}
+    \item Identificador único global
+    \item Metadatos administrativos (fecha de creación, última actualización, fuente principal)
+    \item Características estructuradas consolidadas (edad, género, altura, características físicas dominantes)
+    \item Enlaces a descripciones textuales asociadas
+    \item Enlaces a documentos multimedia relacionados
+    \item Estado y clasificación
+\end{itemize}
+
+\subsubsection{Colección de Descripciones}
+Contiene las descripciones textuales individuales:
+
+\begin{itemize}
+    \item Identificador único de descripción
+    \item Referencia al perfil asociado
+    \item Texto original completo
+    \item Fuente y metadatos de origen
+    \item Timestamp y contexto de captura
+    \item Métricas de calidad y completitud
+    \item Versión procesada y normalizada
+    \item Estado de procesamiento
+\end{itemize}
+
+\subsubsection{Almacén de Embeddings}
+Gestiona las representaciones vectoriales generadas:
+
+\begin{itemize}
+    \item Identificador de embedding
+    \item Referencia a la descripción original
+    \item Vector denso (generalmente de 768 dimensiones)
+    \item Modelo utilizado para generación
+    \item Timestamp de creación
+    \item Metadatos de calidad
+    \item Vectores de aspectos separados (cuando aplica)
+\end{itemize}
+
+\subsubsection{Colección de Entidades}
+Almacena entidades extraídas y normalizadas:
+
+\begin{itemize}
+    \item Identificador de entidad
+    \item Tipo de entidad (característica física, vestimenta, etc.)
+    \item Valor normalizado
+    \item Referencias a descripciones donde aparece
+    \item Frecuencia y distribución estadística
+\end{itemize}
+
+\subsubsection{Registro de Búsquedas}
+Mantiene un historial de consultas para análisis y mejora continua:
+
+\begin{itemize}
+    \item Identificador de consulta
+    \item Texto o parámetros de búsqueda
+    \item Timestamp y contexto
+    \item Resultados presentados
+    \item Interacciones del usuario con los resultados
+    \item Métricas de rendimiento
+\end{itemize}
+
+\subsection{Tecnologías Implementadas}
+\label{subsec:ds-tecnologias}
+
+El servicio de almacenamiento integra las siguientes tecnologías:
+
+\subsubsection{MongoDB}
+Utilizado como almacén documental principal para:
+\begin{itemize}
+    \item Perfiles de personas
+    \item Descripciones textuales originales y procesadas
+    \item Metadatos enriquecidos
+    \item Datos semiestructurados
+\end{itemize}
+
+Se implementa con una configuración de clúster replicado para alta disponibilidad, con sharding para escalabilidad horizontal. Los índices se optimizan para patrones de consulta frecuentes, incluyendo índices compuestos e índices de texto para búsquedas textuales básicas.
+
+\subsubsection{Milvus}
+Base de datos vectorial especializada que proporciona:
+\begin{itemize}
+    \item Almacenamiento eficiente de embeddings de alta dimensionalidad
+    \item Búsqueda por similitud de vectores con algoritmos ANN (Approximate Nearest Neighbors)
+    \item Escalabilidad para miles de millones de vectores
+    \item Particionamiento de datos para optimizar consultas
+\end{itemize}
+
+La configuración de Milvus incluye índices HNSW (Hierarchical Navigable Small World) para los vectores, optimizados para maximizar la relación entre precisión y rendimiento.
+
+\subsubsection{PostgreSQL}
+Utilizado para datos estrictamente relacionales:
+\begin{itemize}
+    \item Relaciones entre entidades
+    \item Datos transaccionales
+    \item Información de auditoría y control de acceso
+    \item Configuración del sistema
+\end{itemize}
+
+Se aprovechan características avanzadas como particionamiento, JSON nativo y extensiones específicas como TimescaleDB para datos de series temporales.
+
+\subsubsection{Redis}
+Implementado como capa de caché distribuida:
+\begin{itemize}
+    \item Almacenamiento en caché de resultados de consultas frecuentes
+    \item Gestión de sesiones y estado transitorio
+    \item Colas y estructuras de datos para coordinación entre servicios
+    \item Pub/Sub para notificaciones en tiempo real
+\end{itemize}
+
+Se configura con persistencia parcial y políticas de expiración adaptadas a los diferentes tipos de datos en caché.
+
+\subsubsection{MinIO}
+Proporciona almacenamiento de objetos compatible con S3:
+\begin{itemize}
+    \item Documentos originales (PDFs, imágenes, etc.)
+    \item Backups y snapshots de otras bases de datos
+    \item Modelos ML serializados
+    \item Datos históricos archivados
+\end{itemize}
+
+\subsection{Esquema de Particionamiento y Escalabilidad}
+\label{subsec:ds-particionamiento}
+
+Para manejar grandes volúmenes de datos, el servicio implementa estrategias de particionamiento horizontal:
+
+\begin{itemize}
+    \item \textbf{Sharding basado en dominio}: Los datos se particionan primariamente por dominio funcional o geográfico, permitiendo que consultas relacionadas con un dominio específico se dirijan a un conjunto limitado de nodos.
+    
+    \item \textbf{Particionamiento temporal}: Para datos con una clara dimensión temporal, se implementa particionamiento por períodos (año, mes), facilitando la gestión del ciclo de vida de la información.
+    
+    \item \textbf{Replicación selectiva}: Datos frecuentemente accedidos se replican en múltiples nodos para distribuir la carga de lectura, mientras que la escritura se centraliza para mantener la consistencia.
+    
+    \item \textbf{Políticas de archivado}: Datos históricos o de baja frecuencia de acceso se mueven automáticamente a almacenamiento de menor coste, manteniendo accesibilidad pero optimizando recursos.
+\end{itemize}
+
+Cada tecnología implementa sus propios mecanismos de escalabilidad:
+\begin{itemize}
+    \item MongoDB: Sharding por rango y hash, con balanceo automático
+    \item Milvus: Particionamiento por atributos y escalado de nodos para búsqueda
+    \item PostgreSQL: Particionamiento declarativo y read replicas
+    \item Redis: Clusterización con hash slots
+    \item MinIO: Distribución de objetos entre múltiples nodos
+\end{itemize}
+
+\subsection{Interfaces y Patrones de Acceso}
+\label{subsec:ds-interfaces}
+
+El Data Storage expone múltiples interfaces adaptadas a diferentes patrones de acceso:
+
+\subsubsection{REST API}
+Proporciona acceso CRUD (Create, Read, Update, Delete) completo a todas las colecciones:
+\begin{itemize}
+    \item Endpoints especializados por tipo de datos
+    \item Filtrado flexible mediante parámetros de consulta
+    \item Soporte para operaciones por lotes
+    \item Paginación y ordenación configurable
+    \item Versionado de API para compatibilidad evolutiva
+\end{itemize}
+
+\subsubsection{GraphQL API}
+Permite consultas complejas que recuperan información relacionada en una sola operación:
+\begin{itemize}
+    \item Resolución eficiente de relaciones entre entidades
+    \item Selección precisa de campos requeridos
+    \item Reducción del número de round-trips entre servicios
+    \item Introspección y documentación integrada
+\end{itemize}
+
+\subsubsection{Streaming API}
+Implementa patrones de cambio de feed para sincronización en tiempo real:
+\begin{itemize}
+    \item Notificaciones de cambios en documentos
+    \item Suscripción a eventos de actualización
+    \item Propagación eficiente de modificaciones
+    \item Soporte para consistency eventual entre servicios
+\end{itemize}
+
+\subsubsection{Vector Search API}
+Especializada en búsquedas por similitud vectorial:
+\begin{itemize}
+    \item Búsqueda de vecinos más cercanos (k-NN)
+    \item Soporte para filtros adicionales sobre metadatos
+    \item Configuración de parámetros de aproximación
+    \item Funciones de scoring y fusión de resultados
+\end{itemize}
+
+\subsection{Estrategias de Respaldo y Recuperación}
+\label{subsec:ds-respaldo}
+
+Para garantizar la durabilidad de los datos, el servicio implementa múltiples niveles de protección:
+
+\begin{itemize}
+    \item \textbf{Replicación síncrona}: Datos críticos se replican síncronamente en múltiples nodos antes de confirmar operaciones de escritura.
+    
+    \item \textbf{Snapshots incrementales}: Generados automáticamente según políticas configurables (horaria, diaria, semanal).
+    
+    \item \textbf{Backups completos}: Programados durante ventanas de menor actividad, con exportación a almacenamiento externo.
+    
+    \item \textbf{Journaling y logs de transacciones}: Permiten recuperación point-in-time en caso de fallos.
+    
+    \item \textbf{Replicación geográfica}: Datos críticos se replican en múltiples regiones para protección contra desastres regionales.
+    
+    \item \textbf{Procedimientos de verificación}: Validación periódica de la integridad de los datos y la capacidad de recuperación.
+\end{itemize}
+
+\subsection{Seguridad e Integridad de Datos}
+\label{subsec:ds-seguridad}
+
+La seguridad de los datos se implementa a múltiples niveles:
+
+\begin{itemize}
+    \item \textbf{Cifrado en reposo}: Todos los datos persistentes se almacenan cifrados utilizando AES-256.
+    
+    \item \textbf{Cifrado en tránsito}: Comunicaciones entre componentes y con clientes externos utilizan TLS 1.3.
+    
+    \item \textbf{Control de acceso granular}: Políticas basadas en roles (RBAC) y en atributos (ABAC) que restringen el acceso a nivel de colección, documento y campo.
+    
+    \item \textbf{Auditoría completa}: Registro detallado de todas las operaciones de acceso y modificación de datos.
+    
+    \item \textbf{Tokenización}: Datos sensibles se tokenización para minimizar exposición.
+    
+    \item \textbf{Validación de integridad}: Verificación criptográfica de la integridad de los datos mediante hashes y firmas digitales.
+    
+    \item \textbf{Rate limiting}: Protección contra ataques de denegación de servicio mediante limitación de tasa adaptativa.
+\end{itemize}
+
+\subsection{Rendimiento y Métricas Operativas}
+\label{subsec:ds-rendimiento}
+
+El servicio de almacenamiento está optimizado para proporcionar las siguientes características de rendimiento:
+
+\begin{itemize}
+    \item \textbf{Latencia de lectura}: < 50ms para el percentil 95 en consultas puntuales.
+    
+    \item \textbf{Throughput de escritura}: Capacidad para procesar más de 1000 operaciones de escritura por segundo.
+    
+    \item \textbf{Escalabilidad vectorial}: Soporte para índices de hasta 100 millones de vectores con búsqueda sub-segundo.
+    
+    \item \textbf{Capacidad de almacenamiento}: Diseñado para gestionar petabytes de datos con crecimiento lineal de recursos.
+    
+    \item \textbf{Disponibilidad}: SLA objetivo de 99.95\% con arquitectura multi-nodo.
+    
+    \item \textbf{Recuperación}: RTO (Recovery Time Objective) < 15 minutos, RPO (Recovery Point Objective) < 5 minutos para datos críticos.
+\end{itemize}
+
+El sistema mantiene un conjunto completo de métricas operativas, incluyendo:
+\begin{itemize}
+    \item Tasas de aciertos/fallos de caché
+    \item Distribución de latencias por tipo de operación
+    \item Utilización de recursos (CPU, memoria, disco, red)
+    \item Tiempos de respuesta para diferentes patrones de consulta
+    \item Eficiencia de índices y estadísticas de uso
+\end{itemize}
+
+\section{Servicio de Búsqueda (Search Service)}
+\label{sec:search-service}
+
+El Servicio de Búsqueda representa el componente neurálgico del sistema, responsable de implementar los algoritmos y técnicas que permiten recuperar perfiles de personas basados en la similitud semántica con una descripción de consulta. Este servicio materializa la capacidad fundamental del sistema para identificar coincidencias significativas incluso cuando las descripciones utilizan diferentes términos o niveles de detalle para referirse a características similares.
+
+\subsection{Funcionalidades Principales}
+\label{subsec:ss-funcionalidades}
+
+El Search Service proporciona las siguientes capacidades esenciales:
+
+\begin{itemize}
+    \item \textbf{Búsqueda por similitud semántica}: Encuentra perfiles cuyas descripciones son conceptualmente similares a una consulta, independientemente de la coincidencia exacta de términos.
+    
+    \item \textbf{Búsqueda híbrida}: Combina similitud semántica con filtros estructurados (rango de edad, altura, género, etc.) para consultas más precisas.
+    
+    \item \textbf{Búsqueda por aspectos}: Permite enfocarse en características específicas (solo rasgos faciales, solo vestimenta, etc.) según el contexto de la consulta.
+    
+    \item \textbf{Ranking adaptativo}: Ordena resultados considerando múltiples factores, no solo la similitud vectorial, adaptándose al contexto de búsqueda.
+    
+    \item \textbf{Búsqueda multilingüe}: Encuentra coincidencias relevantes incluso cuando la consulta está en un idioma diferente al de los perfiles almacenados.
+    
+    \item \textbf{Explicabilidad}: Proporciona justificaciones comprensibles sobre por qué cada resultado se considera relevante para la consulta.
+\end{itemize}
+
+\subsection{Arquitectura del Servicio}
+\label{subsec:ss-arquitectura}
+
+El Search Service implementa una arquitectura modular organizada en varios componentes especializados:
+
+\begin{itemize}
+    \item \textbf{Query Understanding Module}: Analiza y enriquece las consultas de usuario, identificando la intención, extrayendo atributos clave y estructurando la búsqueda.
+    
+    \item \textbf{Vector Search Engine}: Implementa algoritmos eficientes de búsqueda aproximada de vecinos más cercanos (ANN) para encontrar embeddings similares.
+    
+    \item \textbf{Filtering Engine}: Aplica restricciones basadas en atributos estructurados, implementando filtrado pre/post para optimizar rendimiento.
+    
+    \item \textbf{Ranking Module}: Ordena los resultados candidatos según algoritmos de relevancia multi-factor.
+    
+    \item \textbf{Explanation Generator}: Construye explicaciones interpretables para justificar la inclusión de cada resultado.
+    
+    \item \textbf{Results Formatter}: Estructura y enriquece los resultados para su presentación al usuario final.
+    
+    \item \textbf{Feedback Collector}: Captura y almacena señales de retroalimentación implícita y explícita para mejorar búsquedas futuras.
+\end{itemize}
+
+\subsection{Algoritmos de Búsqueda por Similitud}
+\label{subsec:ss-algoritmos}
+
+El núcleo del servicio de búsqueda implementa varios algoritmos especializados para la recuperación eficiente por similitud:
+
+\subsubsection{HNSW (Hierarchical Navigable Small World)}
+El sistema utiliza HNSW como algoritmo principal para la búsqueda de vecinos aproximados, configurado específicamente para el dominio de descripciones de personas:
+
+\begin{itemize}
+    \item Construcción de grafo jerárquico con múltiples capas (4-6 capas dependiendo del tamaño del índice)
+    \item Parametrización optimizada con M=16 (conexiones máximas por nodo) y efConstruction=200
+    \item Factor de exploración (ef) configurable dinámicamente según la precisión requerida (típicamente 50-100)
+    \item Implementación con búsqueda en paralelo para aprovechar arquitecturas multicore
+\end{itemize}
+
+Esta configuración equilibra precisión y rendimiento, permitiendo búsquedas sub-segundo incluso en índices con millones de vectores.
+
+\subsubsection{Búsqueda en Múltiples Índices}
+Para manejar diferentes aspectos de las descripciones, el sistema implementa:
+
+\begin{itemize}
+    \item Índices separados para diferentes aspectos semánticos (atributos físicos, vestimenta, comportamiento)
+    \item Mecanismos de fusión de resultados para combinar coincidencias desde múltiples índices
+    \item Ponderación dinámica de índices según el contexto de la consulta
+\end{itemize}
+
+\subsubsection{Búsqueda con Restricciones Semánticas}
+El sistema extiende la búsqueda vectorial básica con restricciones semánticas adicionales:
+
+\begin{itemize}
+    \item Filtrado semántico basado en ontología de dominio
+    \item Expansión controlada de consultas para incluir conceptos relacionados
+    \item Implementación de operadores difusos (fuzzy) para atributos estructurados
+\end{itemize}
+
+\subsection{Estrategias de Filtrado}
+\label{subsec:ss-filtrado}
+
+El Search Service implementa estrategias de filtrado sofisticadas para refinar los resultados de búsqueda:
+
+\begin{itemize}
+    \item \textbf{Filtrado pre-búsqueda}: Reduce el espacio de búsqueda antes de realizar la comparación vectorial, aplicando restricciones a:
+    \begin{itemize}
+        \item Rango de edad
+        \item Género
+        \item Altura y complexión
+        \item Región geográfica
+        \item Período temporal
+    \end{itemize}
+    
+    \item \textbf{Filtrado post-búsqueda}: Refina los resultados después de la recuperación por similitud, basándose en:
+    \begin{itemize}
+        \item Características específicas mencionadas en la consulta
+        \item Consistencia con atributos secundarios
+        \item Nivel de confianza de los datos
+        \item Completitud de los perfiles
+    \end{itemize}
+    
+    \item \textbf{Filtrado dinámico}: Ajusta los criterios de filtrado basándose en el volumen y distribución de resultados:
+    \begin{itemize}
+        \item Relajación automática de restricciones cuando hay pocos resultados
+        \item Refinamiento progresivo cuando hay demasiados resultados
+        \item Sugerencia de filtros adicionales basados en la distribución de atributos
+    \end{itemize}
+\end{itemize}
+
+\subsection{Modelo de Ranking Multi-factor}
+\label{subsec:ss-ranking}
+
+El ordenamiento de resultados se realiza mediante un modelo de ranking que considera múltiples factores ponderados:
+
+\begin{itemize}
+    \item \textbf{Similitud vectorial}: Distancia coseno entre el embedding de la consulta y el del perfil (factor primario).
+    
+    \item \textbf{Coincidencia de características clave}: Presencia y correspondencia de atributos específicamente mencionados en la consulta.
+    
+    \item \textbf{Completitud del perfil}: Perfiles con información más completa reciben una ligera promoción.
+    
+    \item \textbf{Actualidad}: Preferencia configurable por perfiles más recientes o actualizados.
+    
+    \item \textbf{Confiabilidad de fuente}: Perfiles procedentes de fuentes más confiables son priorizados.
+    
+    \item \textbf{Rareza de características}: Mayor peso a coincidencias en características poco comunes (más discriminativas).
+    
+    \item \textbf{Retroalimentación histórica}: Incorporación de señales de retroalimentación de usuarios en búsquedas similares previas.
+\end{itemize}
+
+El sistema implementa un modelo de aprendizaje de ranking (Learning to Rank) que optimiza automáticamente los pesos de estos factores basándose en datos históricos de efectividad de búsqueda.
+
+\subsection{Mecanismos de Explicabilidad}
+\label{subsec:ss-explicabilidad}
+
+Un aspecto distintivo del Search Service es su capacidad para generar explicaciones comprensibles sobre por qué cada resultado se considera relevante:
+
+\begin{itemize}
+    \item \textbf{Análisis de contribución}: Identifica qué elementos de la descripción contribuyen más a la similitud global.
+    
+    \item \textbf{Destacado de coincidencias}: Resalta visualmente las partes de las descripciones que presentan mayor alineación semántica.
+    
+    \item \textbf{Puntuación desglosada}: Muestra la contribución de cada factor al score final de relevancia.
+    
+    \item \textbf{Explicaciones en lenguaje natural}: Genera descripciones textuales que explican por qué el resultado es relevante (ej: "Este perfil coincide principalmente en la descripción del rostro y vestimenta, aunque difiere en altura").
+    
+    \item \textbf{Análisis de diferencias}: Identifica y explica las principales discrepancias entre la consulta y cada resultado.
+\end{itemize}
+
+\subsection{Optimización de Rendimiento}
+\label{subsec:ss-rendimiento}
+
+Para mantener tiempos de respuesta interactivos, el Search Service implementa diversas estrategias de optimización:
+
+\begin{itemize}
+    \item \textbf{Búsqueda en dos fases}: Implementa un enfoque de "recuperación y ranking":
+    \begin{itemize}
+        \item Fase 1: Recuperación rápida de candidatos (100-500) mediante algoritmos ANN optimizados
+        \item Fase 2: Re-ranking detallado aplicando el modelo completo solo a los candidatos preseleccionados
+    \end{itemize}
+    
+    \item \textbf{Particionamiento del índice}: Los índices vectoriales se particionan según criterios semánticos y de distribución para optimizar la localidad de búsqueda.
+    
+    \item \textbf{Caché de resultados}: Implementación de múltiples niveles de caché:
+    \begin{itemize}
+        \item Caché de consultas exactas: Para consultas frecuentes o recientes
+        \item Caché de fragmentos: Para componentes parciales de consultas complejas
+        \item Caché predictiva: Precarga resultados para consultas probables basándose en patrones
+    \end{itemize}
+    
+    \item \textbf{Computación asíncrona}: Los cálculos costosos (como generación de explicaciones detalladas) se realizan asíncronamente, priorizando la entrega rápida de resultados principales.
+    
+    \item \textbf{Ejecución paralela}: Paralelización de la búsqueda a nivel de:
+    \begin{itemize}
+        \item Consultas independientes
+        \item Particiones de índice
+        \item Sub-componentes dentro del proceso de ranking
+    \end{itemize}
+\end{itemize}
+
+\subsection{APIs y Interfaces}
+\label{subsec:ss-apis}
+
+El Search Service expone múltiples interfaces para adaptarse a diferentes patrones de uso:
+
+\subsubsection{API REST}
+Proporciona endpoints para operaciones síncronas:
+\begin{itemize}
+    \item \texttt{/search/text}: Búsqueda por descripción textual
+    \item \texttt{/search/vector}: Búsqueda directa con vector pre-calculado
+    \item \texttt{/search/hybrid}: Búsqueda combinando texto y filtros estructurados
+    \item \texttt{/search/facets}: Recuperación de facetas y agregaciones sobre resultados
+    \item \texttt{/explain}: Generación detallada de explicaciones para un resultado específico
+\end{itemize}
+
+\subsubsection{API Streaming}
+Para casos de búsqueda incremental:
+\begin{itemize}
+    \item Entrega progresiva de resultados a medida que se van encontrando
+    \item Refinamiento interactivo de consultas durante la sesión de búsqueda
+    \item Notificaciones push sobre nuevas coincidencias para consultas persistentes
+\end{itemize}
+
+\subsubsection{API Batch}
+Para procesamiento masivo:
+\begin{itemize}
+    \item Procesamiento eficiente de múltiples consultas en un solo request
+    \item Soporte para tareas asíncronas de larga duración
+    \item Exportación de resultados en diferentes formatos
+\end{itemize}
+
+\subsection{Mecanismos de Retroalimentación y Mejora}
+\label{subsec:ss-retroalimentacion}
+
+El servicio implementa sistemas sofisticados para capturar retroalimentación y mejorar continuamente:
+
+\begin{itemize}
+    \item \textbf{Retroalimentación explícita}: Recopilación directa de valoraciones de usuarios sobre la relevancia de resultados.
+    
+    \item \textbf{Retroalimentación implícita}: Inferencia de relevancia basada en comportamiento de usuario:
+    \begin{itemize}
+        \item Clicks y tiempo de permanencia
+        \item Patrón de exploración de resultados
+        \item Acciones posteriores a la visualización
+    \end{itemize}
+    
+    \item \textbf{Análisis de sesiones}: Estudio de patrones de refinamiento de consultas para identificar búsquedas insatisfactorias.
+    
+    \item \textbf{Evaluación continua}: Comparación automática con conjuntos de prueba para detectar degradación de calidad.
+    
+    \item \textbf{Aprendizaje activo}: Identificación de casos difíciles para revisión y mejora específica.
+\end{itemize}
+
+Esta retroalimentación se utiliza para:
+\begin{itemize}
+    \item Ajustar dinámicamente los pesos del modelo de ranking
+    \item Refinar los algoritmos de expansión y reformulación de consultas
+    \item Identificar clases de consultas problemáticas para análisis específico
+    \item Priorizar mejoras en componentes específicos del sistema
+\end{itemize}
+
+\subsection{Implementación Técnica}
+\label{subsec:ss-implementacion}
+
+El Search Service está implementado utilizando las siguientes tecnologías:
+
+\begin{itemize}
+    \item \textbf{Lenguaje principal}: Rust para los componentes críticos de rendimiento, con Python para componentes de alto nivel.
+    
+    \item \textbf{Motor de búsqueda vectorial}: Implementación personalizada basada en Qdrant como base, con extensiones específicas del dominio.
+    
+    \item \textbf{API layer}: Combinación de FastAPI (Python) para endpoints de alto nivel y Actix (Rust) para operaciones de alto rendimiento.
+    
+    \item \textbf{Framework de ranking}: LightGBM para el modelo de ranking con características personalizadas.
+    
+    \item \textbf{Cacheado distribuido}: Redis para almacenamiento en caché con políticas de expiración adaptativas.
+    
+    \item \textbf{Procesamiento asíncrono}: Tokio (Rust) y asyncio (Python) para operaciones no bloqueantes.
+    
+    \item \textbf{Monitorización}: Telemetría completa con Prometheus, Grafana y tracing distribuido con OpenTelemetry.
+\end{itemize}
+
+El servicio se despliega en contenedores Docker, con separación entre nodos de coordinación y nodos de búsqueda para facilitar la escalabilidad independiente.
+
+\section{Servicio de Autenticación (Auth Service)}
+\label{sec:auth-service}
+
+El Servicio de Autenticación constituye un componente fundamental para garantizar la seguridad y el control de acceso en todo el sistema. Este servicio centraliza las funciones de autenticación, autorización y gestión de identidades, proporcionando un enfoque coherente y robusto de seguridad a través de todos los microservicios que componen la plataforma.
+
+\subsection{Funcionalidades Principales}
+\label{subsec:as-funcionalidades}
+
+El Auth Service proporciona las siguientes capacidades esenciales:
+
+\begin{itemize}
+    \item \textbf{Autenticación de usuarios}: Verificación de identidades mediante múltiples métodos, asegurando que solo usuarios legítimos puedan acceder al sistema.
+    
+    \item \textbf{Gestión de sesiones}: Creación, mantenimiento y revocación de sesiones de usuario, controlando el ciclo de vida del acceso al sistema.
+    
+    \item \textbf{Autorización granular}: Control preciso sobre qué recursos puede acceder cada usuario, implementando modelos de permisos sofisticados.
+    
+    \item \textbf{Federación de identidades}: Integración con proveedores externos de identidad, facilitando experiencias de inicio de sesión único (SSO).
+    
+    \item \textbf{API segura para servicios}: Autenticación y autorización para comunicaciones entre microservicios internos del sistema.
+    
+    \item \textbf{Auditoría de seguridad}: Registro detallado de todas las operaciones relacionadas con acceso y permisos.
+    
+    \item \textbf{Gestión de tokens}: Emisión, validación y revocación de tokens de acceso, utilizando estándares como JWT (JSON Web Tokens).
+\end{itemize}
+
+\subsection{Arquitectura de Seguridad}
+\label{subsec:as-arquitectura}
+
+El Auth Service implementa una arquitectura basada en estándares modernos de seguridad, con los siguientes componentes principales:
+
+\begin{itemize}
+    \item \textbf{Identity Provider (IdP)}: Núcleo del servicio, responsable de la autenticación y mantenimiento de identidades de usuario.
+    
+    \item \textbf{OAuth2 Authorization Server}: Implementa el flujo completo de OAuth 2.0, permitiendo la delegación segura de acceso.
+    
+    \item \textbf{OpenID Connect Provider}: Extiende OAuth 2.0 con funcionalidades de identidad, proporcionando información verificada sobre los usuarios.
+    
+    \item \textbf{Token Service}: Gestiona la emisión, validación y revocación de tokens de acceso y refresco.
+    
+    \item \textbf{Policy Enforcement Point (PEP)}: Puntos de control que interceptan solicitudes para verificar permisos antes de permitir el acceso a recursos.
+    
+    \item \textbf{Policy Decision Point (PDP)}: Motor de evaluación de políticas que determina si una solicitud debe ser permitida según las políticas configuradas.
+    
+    \item \textbf{Policy Administration Point (PAP)}: Interfaz para gestionar y configurar políticas de seguridad.
+    
+    \item \textbf{User Directory}: Almacén seguro para información de usuarios, roles, grupos y atributos.
+    
+    \item \textbf{Audit Logger}: Componente dedicado a registrar de forma inmutable todas las operaciones relacionadas con seguridad.
+\end{itemize}
+
+\subsection{Modelos de Autenticación}
+\label{subsec:as-autenticacion}
+
+El servicio soporta múltiples métodos de autenticación para adaptarse a diferentes requisitos de seguridad y experiencia de usuario:
+
+\begin{itemize}
+    \item \textbf{Autenticación basada en credenciales}:
+    \begin{itemize}
+        \item Usuario/contraseña con políticas robustas de complejidad y caducidad
+        \item Protección contra ataques de fuerza bruta mediante bloqueo progresivo
+        \item Almacenamiento seguro de contraseñas mediante algoritmos de hash modernos (Argon2id)
+    \end{itemize}
+    
+    \item \textbf{Autenticación multifactor (MFA)}:
+    \begin{itemize}
+        \item Códigos temporales (TOTP) mediante aplicaciones como Google Authenticator
+        \item Verificación por SMS o correo electrónico
+        \item Llaves de seguridad físicas compatibles con FIDO2/WebAuthn
+        \item Notificaciones push a dispositivos verificados
+    \end{itemize}
+    
+    \item \textbf{Autenticación federada}:
+    \begin{itemize}
+        \item Integración con proveedores de identidad corporativos (Active Directory, Azure AD)
+        \item Soporte para proveedores SAML 2.0
+        \item Autenticación social (Google, Microsoft, GitHub) para ciertos niveles de acceso
+    \end{itemize}
+    
+    \item \textbf{Autenticación para servicios}:
+    \begin{itemize}
+        \item Autenticación mutua TLS (mTLS) para comunicaciones entre servicios
+        \item Secretos compartidos y API keys para integraciones externas
+        \item OAuth 2.0 Client Credentials para aplicaciones máquina-a-máquina
+    \end{itemize}
+\end{itemize}
+
+\subsection{Modelo de Autorización}
+\label{subsec:as-autorizacion}
+
+El sistema implementa un modelo de autorización sofisticado basado en múltiples estrategias complementarias:
+
+\subsubsection{Control de Acceso Basado en Roles (RBAC)}
+Define permisos agrupados en roles que luego se asignan a usuarios:
+
+\begin{itemize}
+    \item Roles predefinidos con conjuntos específicos de permisos (Administrador, Analista, Operador, Auditor, etc.)
+    \item Jerarquía de roles que permite herencia de permisos
+    \item Separación de funciones (SoD) para prevenir conflictos de interés
+    \item Asignación dinámica de roles basada en contexto organizacional
+\end{itemize}
+
+\subsubsection{Control de Acceso Basado en Atributos (ABAC)}
+Permite decisiones de acceso más flexibles basadas en atributos del usuario, recurso, acción y entorno:
+
+\begin{itemize}
+    \item Evaluación de políticas basadas en múltiples atributos (departamento, nivel de clearance, ubicación, hora del día)
+    \item Políticas expresadas en lenguaje declarativo usando ALFA (lenguaje de políticas basado en XACML)
+    \item Evaluación contextual que considera el estado del sistema y metadatos de la solicitud
+    \item Soporte para condiciones complejas y operadores booleanos
+\end{itemize}
+
+\subsubsection{Control de Acceso Basado en Relaciones (ReBAC)}
+Particularmente relevante para el dominio de identificación de personas:
+
+\begin{itemize}
+    \item Permisos basados en la relación entre el usuario y los datos (propietario, supervisor, colaborador)
+    \item Propagación controlada de permisos a través de relaciones definidas
+    \item Restricciones de visibilidad basadas en jurisdicción, caso o proyecto
+\end{itemize}
+
+\subsection{Gestión de Tokens y Sesiones}
+\label{subsec:as-tokens}
+
+El servicio implementa una estrategia robusta para la gestión de tokens de acceso:
+
+\begin{itemize}
+    \item \textbf{Estructura de tokens}: JWT firmados digitalmente que contienen:
+    \begin{itemize}
+        \item Identificación del usuario (sub)
+        \item Ámbito de acceso (scope)
+        \item Tiempo de emisión y expiración
+        \item Contexto de autenticación (método utilizado, nivel de confianza)
+        \item Claims específicos relevantes para autorización
+    \end{itemize}
+    
+    \item \textbf{Ciclo de vida de tokens}:
+    \begin{itemize}
+        \item Tokens de acceso de corta duración (15-60 minutos)
+        \item Tokens de refresco de duración media con rotación (24 horas - 7 días)
+        \item Mecanismo de revocación basado en listas negras distribuidas
+        \item Validación de integridad mediante firmas RS256
+    \end{itemize}
+    
+    \item \textbf{Estrategia de sesiones}:
+    \begin{itemize}
+        \item Sesiones distribuidas almacenadas en Redis
+        \item Timeout adaptativo basado en actividad y riesgo
+        \item Limitación configurable de sesiones concurrentes
+        \item Terminación forzada de sesiones ante cambios de permisos críticos
+    \end{itemize}
+\end{itemize}
+
+\subsection{Seguridad a Nivel de API}
+\label{subsec:as-api-security}
+
+Todas las APIs del sistema, tanto externas como entre microservicios, implementan múltiples capas de seguridad:
+
+\begin{itemize}
+    \item \textbf{Protección perimetral}:
+    \begin{itemize}
+        \item TLS 1.3 obligatorio para todas las comunicaciones
+        \item HTTP Security Headers (HSTS, CSP, X-Content-Type-Options)
+        \item Protección contra ataques CSRF mediante tokens específicos
+        \item Limitación de tasa adaptativa para prevenir abusos
+    \end{itemize}
+    
+    \item \textbf{Validación de entradas}:
+    \begin{itemize}
+        \item Esquemas de validación estrictos con JSON Schema
+        \item Sanitización de entradas para prevenir inyecciones
+        \item Validación contextual que considera el estado y la coherencia
+    \end{itemize}
+    
+    \item \textbf{Comunicación entre servicios}:
+    \begin{itemize}
+        \item mTLS para autenticación mutua entre microservicios
+        \item Verificación de origen mediante network policies
+        \item Tokens de servicio con ámbito limitado y duración corta
+    \end{itemize}
+\end{itemize}
+
+\subsection{Auditoría y Cumplimiento}
+\label{subsec:as-auditoria}
+
+El sistema implementa capacidades avanzadas de auditoría para satisfacer requisitos regulatorios y de cumplimiento:
+
+\begin{itemize}
+    \item \textbf{Registro inmutable}: Todas las operaciones de autenticación, autorización y gestión de identidades se registran en logs inmutables.
+    
+    \item \textbf{Eventos auditados}:
+    \begin{itemize}
+        \item Intentos de autenticación (exitosos y fallidos)
+        \item Cambios en permisos o roles
+        \item Acceso a datos sensibles
+        \item Modificaciones de políticas de seguridad
+        \item Creación, modificación y eliminación de cuentas
+        \item Eventos administrativos (configuración, mantenimiento)
+    \end{itemize}
+    
+    \item \textbf{Detalles de registros}:
+    \begin{itemize}
+        \item Timestamp preciso con sincronización NTP
+        \item Identificación del actor (usuario o servicio)
+        \item Acción realizada y resultado
+        \item Recursos afectados
+        \item Contexto (dirección IP, dispositivo, ubicación)
+        \item Identificador de correlación para seguimiento de operaciones
+    \end{itemize}
+    
+    \item \textbf{Alertas y monitorización}:
+    \begin{itemize}
+        \item Detección de patrones anómalos o sospechosos
+        \item Alertas en tiempo real para eventos críticos
+        \item Paneles de visualización para análisis de tendencias
+    \end{itemize}
+\end{itemize}
+
+\subsection{Implementación Técnica}
+\label{subsec:as-implementacion}
+
+El Auth Service está implementado utilizando tecnologías modernas y probadas en el ámbito de la seguridad:
+
+\begin{itemize}
+    \item \textbf{Plataforma base}: Keycloak (Red Hat SSO) con extensiones personalizadas para requisitos específicos del dominio.
+    
+    \item \textbf{Lenguajes principales}:
+    \begin{itemize}
+        \item Java para componentes core de Keycloak
+        \item Kotlin para extensiones y servicios personalizados
+        \item Go para componentes de alto rendimiento (validación de tokens)
+    \end{itemize}
+    
+    \item \textbf{Almacenamiento de datos}:
+    \begin{itemize}
+        \item PostgreSQL para datos principales de usuarios y configuración
+        \item Redis para gestión de sesiones y cachés de tokens
+        \item Kafka para eventos de auditoría y notificaciones
+    \end{itemize}
+    
+    \item \textbf{Infraestructura criptográfica}:
+    \begin{itemize}
+        \item Gestión de claves mediante HashiCorp Vault
+        \item Algoritmos de firma: RS256, ES384
+        \item Algoritmos de hash para contraseñas: Argon2id
+        \item TLS 1.3 con Perfect Forward Secrecy
+    \end{itemize}
+    
+    \item \textbf{Integración y automatización}:
+    \begin{itemize}
+        \item OpenAPI para documentación y generación de clientes
+        \item Terraform para aprovisionamiento de infraestructura
+        \item Automated security testing con OWASP ZAP y otros
+    \end{itemize}
+\end{itemize}
+
+\subsection{Alta Disponibilidad y Recuperación}
+\label{subsec:as-disponibilidad}
+
+Dada la criticidad del servicio de autenticación, se implementan estrategias específicas para garantizar su disponibilidad:
+
+\begin{itemize}
+    \item \textbf{Arquitectura multi-nodo}: Despliegue en múltiples instancias con balanceo de carga.
+    
+    \item \textbf{Replicación síncrona}: Para datos críticos de autenticación y autorización.
+    
+    \item \textbf{Degradación elegante}: Capacidad para operar con funcionalidad reducida ante fallos parciales.
+    
+    \item \textbf{Circuit-breakers}: Protección contra fallos en cascada en integraciones con sistemas externos.
+    
+    \item \textbf{Diseño activo-activo}: Todas las instancias pueden servir solicitudes, eliminando puntos únicos de fallo.
+    
+\newpage 
