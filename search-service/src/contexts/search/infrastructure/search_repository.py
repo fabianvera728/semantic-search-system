@@ -83,6 +83,12 @@ class SearchRepositoryImpl(SearchRepository):
             else:
                 raise InvalidSearchTypeException(search_type)
             
+            new_results = []
+            for result in results:
+                row_data = await self._get_row_data(dataset_id, result.id)
+                result.data = row_data.get("data", {})
+                new_results.append(result)
+
             search_results = SearchResults(
                 query=request.query.text,
                 results=results,
@@ -102,6 +108,14 @@ class SearchRepositoryImpl(SearchRepository):
             logger.error(f"Error al realizar búsqueda: {str(e)}")
             raise SearchExecutionException(str(e), request.dataset_id.value)
     
+    async def _get_row_data(self, dataset_id: str, row_id: str) -> Dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.data_storage_url}/datasets/{dataset_id}/rows/{row_id}",
+                timeout=30.0
+            )
+            return response.json()
+
     async def _semantic_search(
         self, 
         query: str, 
@@ -115,13 +129,10 @@ class SearchRepositoryImpl(SearchRepository):
             model=model_name
         )
         query_embedding = await self.embedding_repository.generate_embeddings(embedding_request)
-
-        import logging
-        logger = logging.getLogger(__name__)
-
-        logger.info(f"🅰️🅰️ query_embedding: {query_embedding} 🅰️🅰️")
         
         distances, indices = index.search(query_embedding, limit)
+
+        logger.info(f"[📏] Metric type: {index.metric_type}")
         
         results = []
         for i, idx in enumerate(indices[0]):
@@ -129,6 +140,8 @@ class SearchRepositoryImpl(SearchRepository):
                 continue
                 
             embedding = embedding_collection.embeddings[idx]
+            logger.info(f"[🔍] Distances: {distances}")
+            logger.info(f"[🔍] Indices: {indices}")
             score = float(1.0 - distances[0][i])
             
             result = SearchResult(
@@ -273,16 +286,12 @@ class SearchRepositoryImpl(SearchRepository):
         return None
     
     async def _load_dataset(self, dataset_id: str) -> None:
-        try:
-            logger.info(f"Cargando dataset {dataset_id} desde el servicio de almacenamiento")
-            
+        try:            
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.embedding_service_url}/datasets/{dataset_id}/embeddings?limit=1000",
+                    f"{self.embedding_service_url}/datasets/{dataset_id}/embeddings?limit=5000",
                     timeout=30.0
                 )
-
-                logger.info(f"🅰️🅰️ response: {response} 🅰️🅰️")
                 
                 if response.status_code == 404:
                     raise DatasetNotFoundException(dataset_id)
@@ -326,5 +335,4 @@ class SearchRepositoryImpl(SearchRepository):
         except DataStorageConnectionException:
             raise
         except Exception as e:
-            logger.error(f"Error al cargar dataset {dataset_id}: {str(e)}")
             raise Exception(f"Error al cargar dataset {dataset_id}: {str(e)}")

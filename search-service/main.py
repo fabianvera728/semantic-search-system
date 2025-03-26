@@ -22,11 +22,6 @@ async def health():
 
 
 if __name__ == "__main__":
-    import logging 
-
-    logger = logging.getLogger(__name__)
-    logger.info(config)
-
     uvicorn.run(
         "main:app",
         host=config.host,

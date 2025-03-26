@@ -32,7 +32,7 @@ class SearchService:
         dataset_id: str, 
         limit: int = 10,
         search_type: str = "semantic",
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         hybrid_alpha: float = 0.5,
         additional_params: Optional[Dict[str, Any]] = None
     ) -> SearchResults:
@@ -63,7 +63,7 @@ class SearchService:
     async def generate_embeddings(
         self, 
         texts: List[str], 
-        model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         batch_size: int = 32,
         additional_params: Optional[Dict[str, Any]] = None
     ) -> List[List[float]]:

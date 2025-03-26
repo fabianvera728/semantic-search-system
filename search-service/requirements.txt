@@ -10,6 +10,6 @@ spacy==3.8.4
 huggingface_hub==0.29.3
 sentence-transformers==3.4.1
 torch==2.6.0
-faiss-cpu==1.7.4
+faiss-gpu==1.7.2
 psycopg2-binary==2.9.6 
 PyJWT==2.10.1

@@ -12,6 +12,8 @@ class SearchResult:
     text: str
     score: float
     metadata: Dict[str, Any] = field(default_factory=dict)
+    data: Dict[str, Any] = field(default_factory=dict)
+    row_id: str = ""
 
 
 @dataclass

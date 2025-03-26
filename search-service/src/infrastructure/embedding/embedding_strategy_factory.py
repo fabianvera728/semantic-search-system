@@ -20,7 +20,6 @@ class EmbeddingStrategyFactory:
         "openai": OpenAIStrategy
     }
     
-    # Alias para mantener compatibilidad con código existente
     _aliases = {
         "sentence-transformers": "sentence-transformers"
     }
@@ -29,7 +28,6 @@ class EmbeddingStrategyFactory:
     def get_strategy(cls, strategy_name: str, **kwargs) -> EmbeddingStrategy:
         """Crea una estrategia de embedding según el nombre"""
         
-        # Verificar si es un alias
         if strategy_name in cls._aliases:
             logger.warning(f"Uso de nombre obsoleto '{strategy_name}'. Se usará '{cls._aliases[strategy_name]}' en su lugar.")
             strategy_name = cls._aliases[strategy_name]

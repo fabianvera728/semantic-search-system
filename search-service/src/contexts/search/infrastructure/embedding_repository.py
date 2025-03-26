@@ -17,7 +17,7 @@ class EmbeddingRepositoryImpl(EmbeddingRepository):
     def __init__(self):
         self.default_model = os.getenv("DEFAULT_EMBEDDING_MODEL", "sentence-transformer")
         self.default_model_params = {
-            "model_name": os.getenv("DEFAULT_MODEL_NAME", "all-MiniLM-L6-v2")
+            "model_name": os.getenv("DEFAULT_MODEL_NAME", "paraphrase-multilingual-MiniLM-L12-v2")
         }
         
         self.model_cache = {}
@@ -139,6 +139,6 @@ class EmbeddingRepositoryImpl(EmbeddingRepository):
                         model_info = strategy.get_model_info()
                         models.append(model_info)
                     except Exception as e:
-                        logger.warning(f"No se pudo obtener información del modelo {model_name}: {str(e)}")
+                        raise Exception(f"No se pudo obtener información del modelo {model_name}: {str(e)}")
         
         return models 

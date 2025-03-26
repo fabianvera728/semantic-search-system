@@ -25,7 +25,7 @@ class DatasetId:
 class SearchConfig:
     """Configuración para una búsqueda"""
     limit: int = 10
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     search_type: Literal["semantic", "keyword", "hybrid"] = "semantic"
     hybrid_alpha: float = 0.5  # Peso para combinar búsqueda semántica y por palabras clave
     additional_params: Dict[str, Any] = field(default_factory=dict)
@@ -44,7 +44,7 @@ class SearchRequest:
 class EmbeddingRequest:
     """Solicitud para generar embeddings"""
     texts: List[str]
-    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     batch_size: int = 32
     request_id: UUID = field(default_factory=uuid4)
     additional_params: Dict[str, Any] = field(default_factory=dict) 
