@@ -308,15 +308,11 @@ class EmbeddingService:
         return await self.dataset_repository.list_datasets(limit, offset)
     
     async def delete_dataset(self, dataset_id: str) -> bool:
-        """Delete a dataset and all its embeddings"""
         dataset = await self.dataset_repository.get_dataset(dataset_id)
         if not dataset:
             raise DatasetNotFoundError(dataset_id)
         
-        # Delete embeddings first
         deleted_count = await self.embedding_repository.delete_dataset_embeddings(dataset_id)
-        logger.info(f"Deleted {deleted_count} embeddings from dataset {dataset_id}")
         
-        # Delete dataset
         result = await self.dataset_repository.delete_dataset(dataset_id)
         return result 

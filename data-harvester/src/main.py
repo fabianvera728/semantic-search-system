@@ -19,13 +19,6 @@ from src.infrastructure.adapters.notifications import ConsoleNotificationAdapter
 
 
 def setup_logging(log_level: str, log_file: Optional[str] = None):
-    """
-    Configura el sistema de logging.
-    
-    Args:
-        log_level: Nivel de logging
-        log_file: Archivo de log opcional
-    """
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
         numeric_level = logging.INFO
@@ -110,14 +103,10 @@ def create_app():
 
 
 def main():
-    """Punto de entrada principal de la aplicación."""
-    # Cargar configuración
     config = get_app_config()
     
-    # Crear aplicación
     app = create_app()
     
-    # Iniciar servidor
     uvicorn.run(
         app,
         host=config.host,

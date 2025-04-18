@@ -124,15 +124,28 @@ class SearchRepositoryImpl(SearchRepository):
         limit: int,
         model_name: str
     ) -> List[SearchResult]:
+        # Preprocesamiento de la consulta
+        clean_query = query.strip()
+        
+        # Generar embedding para la consulta
         embedding_request = EmbeddingRequest(
-            texts=[query],
+            texts=[clean_query],
             model=model_name
         )
         query_embedding = await self.embedding_repository.generate_embeddings(embedding_request)
         
-        distances, indices = index.search(query_embedding, limit)
+        # Búsqueda en el índice FAISS - aumentar el número de resultados iniciales para filtrar después
+        search_limit = min(limit * 3, len(embedding_collection.embeddings))
+        distances, indices = index.search(query_embedding, search_limit)
 
         logger.info(f"[📏] Metric type: {index.metric_type}")
+        logger.info(f"[🔍] Query: {clean_query}")
+        logger.info(f"[🔍] Found {len(indices[0])} initial matches")
+        
+        # Normalizar las distancias para obtener mejores puntuaciones de relevancia
+        max_distance = np.max(distances[0]) if len(distances[0]) > 0 else 1.0
+        min_distance = np.min(distances[0]) if len(distances[0]) > 0 else 0.0
+        distance_range = max(max_distance - min_distance, 1e-5)  # Evitar división por cero
         
         results = []
         for i, idx in enumerate(indices[0]):
@@ -140,19 +153,66 @@ class SearchRepositoryImpl(SearchRepository):
                 continue
                 
             embedding = embedding_collection.embeddings[idx]
-            logger.info(f"[🔍] Distances: {distances}")
-            logger.info(f"[🔍] Indices: {indices}")
-            score = float(1.0 - distances[0][i])
+            
+            # Cálculo mejorado de la puntuación de relevancia
+            normalized_distance = (distances[0][i] - min_distance) / distance_range
+            base_score = 1.0 - normalized_distance
+            
+            # Amplificar las puntuaciones usando una función sigmoide
+            amplified_score = 1.0 / (1.0 + np.exp(-10 * (base_score - 0.5)))
+            
+            # Calcular score alternativo con transformación exponencial
+            # Este enfoque da mayor contraste entre resultados buenos y mediocres
+            alt_score = float(np.exp(-distances[0][i]))
+            
+            # Otro score alternativo basado en la distancia original
+            alt_score2 = float(1 / (1 + np.sqrt(distances[0][i])))
+            
+            # Seleccionar el mejor score entre los diferentes métodos
+            final_score = max(amplified_score, alt_score, alt_score2)
+            
+            # Ajustar el score con un boost de términos exactos si hay coincidencias directas
+            query_terms = set(clean_query.lower().split())
+            text_terms = set(embedding.text.lower().split())
+            exact_match_ratio = len(query_terms.intersection(text_terms)) / len(query_terms) if query_terms else 0
+            
+            # Aplicar boost por coincidencias exactas
+            term_boost = 1.0 + (exact_match_ratio * 0.3)  # Hasta 30% de boost por coincidencias exactas
+            final_score = final_score * term_boost
+            
+            # Capear el score a 1.0 máximo
+            final_score = min(final_score, 1.0)
+            
+            # Añadir información de depuración/explicación a los metadatos
+            metadata = {
+                **embedding.metadata,
+                "raw_distance": float(distances[0][i]),
+                "normalized_distance": float(normalized_distance),
+                "base_score": float(base_score),
+                "amplified_score": float(amplified_score),
+                "alt_score": float(alt_score),
+                "alt_score2": float(alt_score2),
+                "term_boost": float(term_boost),
+                "exact_match_ratio": float(exact_match_ratio),
+                "final_score": float(final_score),
+                "query": clean_query
+            }
             
             result = SearchResult(
                 id=embedding.id,
                 text=embedding.text,
-                score=score,
-                metadata=embedding.metadata
+                score=final_score,
+                metadata=metadata
             )
             results.append(result)
         
-        return results
+        # Ordenar por score y limitar a los mejores resultados
+        results.sort(key=lambda x: x.score, reverse=True)
+        top_results = results[:limit]
+        
+        logger.info(f"[🔍] Returning {len(top_results)} filtered matches with scores: {[round(r.score, 3) for r in top_results[:5]]}")
+        
+        return top_results
     
     async def _keyword_search(
         self, 
@@ -199,55 +259,111 @@ class SearchRepositoryImpl(SearchRepository):
         model_name: str,
         alpha: float = 0.5
     ) -> List[SearchResult]:
+        # Preprocesamiento básico de la consulta
+        query = query.strip()
+        
+        # Analizar la consulta para determinar si contiene términos específicos/nombres propios
+        # que podrían beneficiarse de un enfoque más basado en keywords
+        query_words = query.lower().split()
+        
+        # Obtener términos con mayúscula inicial (posibles nombres propios)
+        proper_nouns = [word for word in query.split() if word and word[0].isupper()]
+        
+        # Heurística: si la consulta tiene palabras específicas o nombres propios
+        # ajustamos el balance para dar más peso a coincidencias exactas
+        dynamic_alpha = alpha
+        if proper_nouns:
+            # Si hay nombres propios, reducir el peso semántico
+            dynamic_alpha = max(0.3, alpha - 0.2)
+            logger.info(f"[🔍] Detected proper nouns in query, adjusting alpha to {dynamic_alpha}")
+        
+        # Duplicar limit para tener más candidatos
+        search_limit = limit * 3
+        
+        # Obtener resultados de búsqueda semántica
         semantic_results = await self._semantic_search(
             query, 
             index, 
             embedding_collection, 
-            limit * 2,
+            search_limit,
             model_name
         )
         
+        # Obtener resultados de búsqueda por keywords
         keyword_results = await self._keyword_search(
             query, 
             embedding_collection, 
-            limit * 2
+            search_limit
         )
         
+        # Combinar resultados
         combined_results = {}
         
+        # Procesar resultados semánticos
         for result in semantic_results:
             combined_results[result.id] = {
                 "id": result.id,
                 "text": result.text,
                 "semantic_score": result.score,
                 "keyword_score": 0.0,
-                "metadata": result.metadata
+                "metadata": result.metadata,
+                "match_count": 1  # Contador de cuántos métodos encontraron este resultado
             }
         
+        # Procesar resultados por keywords
         for result in keyword_results:
             if result.id in combined_results:
                 combined_results[result.id]["keyword_score"] = result.score
+                combined_results[result.id]["match_count"] += 1
+                # Combinar metadatos
+                if "metadata" in result.__dict__ and result.metadata:
+                    for key, value in result.metadata.items():
+                        if key not in combined_results[result.id]["metadata"]:
+                            combined_results[result.id]["metadata"][key] = value
             else:
                 combined_results[result.id] = {
                     "id": result.id,
                     "text": result.text,
                     "semantic_score": 0.0,
                     "keyword_score": result.score,
-                    "metadata": result.metadata
+                    "metadata": result.metadata or {},
+                    "match_count": 1
                 }
         
+        # Calcular puntuación combinada con pesos ajustados y boosts
         for result_id, result_data in combined_results.items():
             semantic_score = result_data["semantic_score"]
             keyword_score = result_data["keyword_score"]
-            combined_score = alpha * semantic_score + (1 - alpha) * keyword_score
+            
+            # Factor de coincidencia: premiar resultados encontrados por ambos métodos
+            match_boost = 1.0 + (result_data["match_count"] > 1) * 0.2
+            
+            # Factores para aumentar la relevancia
+            result_text = result_data["text"].lower()
+            query_terms = query.lower().split()
+            
+            # Calcular un boost basado en la presencia de términos de la consulta en el resultado
+            term_match_count = sum(1 for term in query_terms if term in result_text)
+            term_match_ratio = term_match_count / len(query_terms) if query_terms else 0
+            term_boost = 1.0 + term_match_ratio * 0.2  # Aumentar hasta 20% si todos los términos están presentes
+            
+            # Calcular puntuación combinada con alpha dinámico y boosts
+            combined_score = (dynamic_alpha * semantic_score + (1 - dynamic_alpha) * keyword_score) * match_boost * term_boost
+            
+            # Guardar scores
             result_data["combined_score"] = combined_score
+            result_data["match_boost"] = match_boost
+            result_data["term_boost"] = term_boost
+            result_data["alpha_used"] = dynamic_alpha
         
+        # Ordenar resultados por puntuación combinada
         sorted_results = sorted(
             combined_results.values(), 
             key=lambda x: x["combined_score"], 
             reverse=True
         )[:limit]
         
+        # Convertir a objetos SearchResult
         results = []
         for result_data in sorted_results:
             result = SearchResult(
@@ -257,10 +373,16 @@ class SearchRepositoryImpl(SearchRepository):
                 metadata={
                     **result_data["metadata"],
                     "semantic_score": result_data["semantic_score"],
-                    "keyword_score": result_data["keyword_score"]
+                    "keyword_score": result_data["keyword_score"],
+                    "match_boost": result_data["match_boost"],
+                    "term_boost": result_data.get("term_boost", 1.0),
+                    "alpha_used": result_data["alpha_used"],
+                    "query": query
                 }
             )
             results.append(result)
+        
+        logger.info(f"[🔍] Hybrid search with alpha={dynamic_alpha} found {len(results)} results with scores: {[round(r.score, 3) for r in results[:5]]}")
         
         return results
     

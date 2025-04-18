@@ -48,7 +48,7 @@ class DatasetController:
         @self.router.get("/{dataset_id}/embeddings")
         async def list_embeddings(
             dataset_id: str,
-            limit: int = Query(100, ge=1, le=1000),
+            limit: int = Query(100, ge=1, le=10000),
             offset: int = Query(0, ge=0),
             include_vectors: bool = Query(False)
         ):

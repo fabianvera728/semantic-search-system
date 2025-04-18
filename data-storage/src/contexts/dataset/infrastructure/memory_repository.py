@@ -76,3 +76,14 @@ class InMemoryDatasetRepository(DatasetRepository):
         result_dataset = copy.deepcopy(dataset)
         result_dataset.rows = []
         return result_dataset 
+    
+    async def get_dataset_row(self, dataset_id: UUID, row_id: UUID) -> Dict[str, Any]:
+        """Get a specific row for a dataset"""
+        dataset = await self.find_by_id(dataset_id)
+        if not dataset:
+            return None
+        
+        for row in dataset.rows:
+            if row.id == row_id:
+                return row
+        return None

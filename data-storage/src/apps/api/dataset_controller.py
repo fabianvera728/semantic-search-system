@@ -35,6 +35,11 @@ class DatasetRowSchema(BaseModel):
         from_attributes = True
 
 
+class GetDatasetRowRequest(BaseModel):
+    dataset_id: UUID
+    row_id: UUID
+
+
 class DatasetSchema(BaseModel):
     id: str
     name: str
@@ -162,7 +167,6 @@ class DatasetController:
             user_id: str = Depends(get_current_user_id)
         ):
             try:
-                logger.info(f"user_id: {user_id} 🅰️🅰️🅰️")
                 dataset = await self.dataset_service.get_dataset(dataset_id, user_id)
                 return self._entity_to_detail_schema(dataset)
             except DatasetNotFoundError:
@@ -203,6 +207,39 @@ class DatasetController:
                     "total": dataset.row_count,
                     "limit": limit,
                     "offset": offset
+                }
+            except DatasetNotFoundError:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Dataset with ID {dataset_id} not found"
+                )
+            except UnauthorizedAccessError:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"You don't have permission to access this dataset"
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=str(e)
+                )
+            
+        @self.router.get("/{dataset_id}/rows/{row_id}", response_model=DatasetRowSchema)
+        async def get_dataset_row(
+            dataset_id: UUID = Path(...),
+            row_id: UUID = Path(...)
+        ):
+            try:
+                request = GetDatasetRowRequest(
+                    dataset_id=dataset_id,
+                    row_id=row_id
+                )
+                
+                row = await self.dataset_service.get_dataset_row(request)
+                
+                return {
+                    "id": row.id,
+                    "data": row.data
                 }
             except DatasetNotFoundError:
                 raise HTTPException(

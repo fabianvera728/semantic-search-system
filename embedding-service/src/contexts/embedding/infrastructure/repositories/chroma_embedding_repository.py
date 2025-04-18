@@ -35,9 +35,7 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
         try:
             # Load the model
             self.model = SentenceTransformer(self.model_name)
-            logger.info(f"Loaded embedding model: {self.model_name}")
         except Exception as e:
-            logger.error(f"Error loading embedding model {self.model_name}: {str(e)}")
             raise
     
     async def get_chroma_client(self):
@@ -216,10 +214,7 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
                     include=["embeddings", "documents", "metadatas"],
                     where=where
                 )
-                logger.info(f"[🔍] Result listing embeddigns: {result}")
             except Exception as e:
-                logger.error(f"Error getting collection items: {str(e)}")
-                # Intentar sin el filtro where si falla
                 result = collection.get(
                     include=["embeddings", "documents", "metadatas"]
                 )
@@ -230,7 +225,6 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
             start = request.offset
             end = start + request.limit
             
-            # Asegurarnos de que start y end están dentro de los límites
             total_items = len(result["ids"])
             if start >= total_items:
                 return []
@@ -238,7 +232,6 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
             end = min(end, total_items)
             paginated_ids = result["ids"][start:end]
             
-            # Si no hay IDs después de la paginación, devolver lista vacía
             if not paginated_ids:
                 return []
             
@@ -249,17 +242,10 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
             
             embeddings = []
             for i, embedding_id in enumerate(paginated_result["ids"]):
-                # Verificar que los índices existan antes de acceder
                 metadata = {}
                 if "metadatas" in paginated_result and paginated_result["metadatas"] and i < len(paginated_result["metadatas"]):
                     metadata = paginated_result["metadatas"][i]
-                
-                # if (
-                #     "embeddings" in paginated_result 
-                #     and paginated_result["embeddings"] is not None
-                #     and len(paginated_result["embeddings"]) > 0 
-                #     and i < len(paginated_result["embeddings"])
-                # ):
+
                 vector = np.array(paginated_result["embeddings"][i])
                 
                 text = ""

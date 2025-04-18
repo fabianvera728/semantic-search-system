@@ -7,33 +7,8 @@ from src.domain.ports.harvester_port import HarvesterPort
 
 
 class APIHarvesterAdapter(HarvesterPort):
-    """
-    Adaptador que implementa la cosecha de datos desde APIs.
-    
-    Este adaptador soporta la cosecha de datos desde APIs REST.
-    """
     
     async def harvest(self, config: Dict[str, Any]) -> HarvestedData:
-        """
-        Cosecha datos de una API según la configuración proporcionada.
-        
-        Args:
-            config: Configuración específica para la cosecha
-                - url: URL de la API
-                - method: Método HTTP (GET, POST, etc.)
-                - headers: Cabeceras HTTP
-                - params: Parámetros de consulta
-                - data: Datos para enviar en el cuerpo
-                - auth: Autenticación (username, password)
-                - root_path: Ruta raíz para los datos
-            
-        Returns:
-            Los datos cosechados
-            
-        Raises:
-            ValueError: Si la configuración es inválida o la cosecha falla
-        """
-        # Validar configuración
         if "url" not in config:
             raise ValueError("La URL es requerida para la cosecha de API")
         

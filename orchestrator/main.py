@@ -83,23 +83,13 @@ async def search_service_proxy(request: Request, path: str):
     return await proxy_request(request, "search-service", path)
 
 async def proxy_request(request: Request, service: str, path: str):
-    """
-    Reenvía la solicitud al servicio correspondiente.
-    
-    Args:
-        request: Solicitud original
-        service: Nombre del servicio
-        path: Ruta de la solicitud
-        
-    Returns:
-        Respuesta del servicio
-    """
     if service not in SERVICE_URLS:
         raise HTTPException(status_code=404, detail=f"Servicio '{service}' no encontrado")
     
     target_url = f"{SERVICE_URLS[service]}/{path}"
     
     method = request.method
+
     
     headers = dict(request.headers)
     headers.pop("host", None) 
@@ -114,7 +104,7 @@ async def proxy_request(request: Request, service: str, path: str):
             headers=headers,
             params=params,
             content=body,
-            timeout=30.0
+            # timeout=30.0
         )
         
         return Response(

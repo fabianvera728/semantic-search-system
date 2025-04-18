@@ -10,7 +10,8 @@ from ..domain.value_objects import (
     UpdateDatasetRequest,
     AddRowRequest,
     AddColumnRequest,
-    GetDatasetRowsRequest
+    GetDatasetRowsRequest,
+    GetDatasetRowRequest
 )
 from ..domain.events import (
     DatasetCreatedEvent,
@@ -92,10 +93,8 @@ class DatasetService:
         request: GetDatasetRowsRequest,
         user_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        # Verificar que el dataset existe y el usuario tiene acceso
         dataset = await self.get_dataset(request.dataset_id, user_id)
         
-        # Obtener filas con paginación
         rows = await self.repository.get_dataset_rows(
             dataset_id=request.dataset_id,
             limit=request.limit,
@@ -103,6 +102,20 @@ class DatasetService:
         )
         
         return rows
+    
+    async def get_dataset_row(
+        self,
+        request: GetDatasetRowRequest,
+        user_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        dataset = await self.get_dataset(request.dataset_id, user_id)
+
+        row = await self.repository.get_dataset_row(
+            dataset_id=request.dataset_id,
+            row_id=request.row_id
+        )
+
+        return row
 
     async def update_dataset(self, request: UpdateDatasetRequest, user_id: str) -> Dataset:
         dataset = await self.repository.find_by_id(request.dataset_id)

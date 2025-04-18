@@ -50,7 +50,7 @@ def get_app_config() -> AppConfig:
         log_level=os.getenv("EMBEDDING_SERVICE_LOG_LEVEL", "INFO").upper(),
         auth_service_url=os.getenv("AUTH_SERVICE_URL", "http://auth-service:8001"),
         data_storage_url=os.getenv("DATA_STORAGE_URL", "http://data-storage:8003"),
-        embedding_model=os.getenv("EMBEDDING_SERVICE_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+        embedding_model=os.getenv("EMBEDDING_SERVICE_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
         vector_db_type=os.getenv("VECTOR_DB_TYPE", "chromadb"),
         chromadb_host=os.getenv("CHROMADB_HOST", "chromadb"),
         chromadb_port=int(os.getenv("CHROMADB_PORT", "8000")),

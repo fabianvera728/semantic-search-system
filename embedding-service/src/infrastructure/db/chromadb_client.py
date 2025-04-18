@@ -30,12 +30,10 @@ async def get_chromadb_client() -> chromadb.Client:
                 anonymized_telemetry=False
             )
         )
-        logger.info(f"Connected to ChromaDB service at {host}:{port}")
         
         _client.heartbeat()
         return _client
     except Exception as e:
-        logger.error(f"[✖️] Error connecting to ChromaDB service: {str(e)}")
         raise e
 
 
@@ -45,10 +43,8 @@ def get_or_create_collection(client: chromadb.Client, name: str, metadata=None):
 
     try:
         collection = client.get_collection(name=name)
-        logger.info(f"Retrieved existing collection: {name} ✅✅✅✅✅✅")
         return collection
     except Exception as e:
-        logger.error(f"Error retrieving collection: {str(e)} ✖️✖️✖️✖️✖️✖️")
         raise e
     
     # Si llegamos aquí, necesitamos crear la colección

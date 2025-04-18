@@ -50,14 +50,14 @@ class GenerateEmbeddingRequestDTO(BaseModel):
     text: str
     dataset_id: str
     row_id: str
-    model_name: str = "all-MiniLM-L6-v2" 
+    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2" 
 
 
 class BatchEmbeddingRequestDTO(BaseModel):
     texts: List[str]
     dataset_id: str
     row_ids: List[str]
-    model_name: str = "all-MiniLM-L6-v2"
+    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
     batch_size: int = 32
 
 
@@ -88,7 +88,7 @@ class CreateDatasetRequestDTO(BaseModel):
 class ProcessDatasetRowsRequestDTO(BaseModel):
     dataset_id: str
     text_fields: Optional[List[str]] = None
-    model_name: str = "all-MiniLM-L6-v2"    
+    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"    
     rows: Optional[List[Dict[str, Any]]] = None
     batch_size: int = 32
 

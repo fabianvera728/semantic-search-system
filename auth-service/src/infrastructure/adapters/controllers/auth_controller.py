@@ -75,15 +75,10 @@ class AuthController:
         @self.router.post("/login")
         async def login(request: LoginRequest):
             try:
-                logger.error(f"Entro a login")
-
                 result = await self.login_use_case.execute(
                     email=request.email,
                     password=request.password
                 )
-
-                logger.error(f"Salio de login")
-
                 
                 return result
             except ValueError as e:

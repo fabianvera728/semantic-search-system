@@ -44,6 +44,9 @@ class SearchRequest:
         search_type: str = "semantic",
         embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         hybrid_alpha: float = 0.5,
+        expand_query: bool = False,
+        expansion_terms: List[str] = None,
+        min_score: float = None,
         additional_params: Optional[Dict[str, Any]] = None
     ):
         self.query = query
@@ -52,7 +55,18 @@ class SearchRequest:
         self.search_type = search_type
         self.embedding_model = embedding_model
         self.hybrid_alpha = hybrid_alpha
+        self.expand_query = expand_query
+        self.expansion_terms = expansion_terms or []
+        self.min_score = min_score
         self.additional_params = additional_params or {}
+        
+        # Agregar parámetros de expansión a additional_params si no están presentes
+        if "expand_query" not in self.additional_params:
+            self.additional_params["expand_query"] = self.expand_query
+        if "expansion_terms" not in self.additional_params:
+            self.additional_params["expansion_terms"] = self.expansion_terms
+        if self.min_score is not None and "min_score" not in self.additional_params:
+            self.additional_params["min_score"] = self.min_score
 
 
 class SearchController:
@@ -63,9 +77,7 @@ class SearchController:
         self.search_service = search_service
         self.router = APIRouter(prefix="/search", tags=["search"])
         self._register_routes()
-        
-        logger.info("Controlador de búsqueda inicializado")
-    
+            
     def _register_routes(self):
         """Registra las rutas de la API"""
         
@@ -113,7 +125,6 @@ class SearchController:
                     detail=str(e)
                 )
             except Exception as e:
-                logger.error(f"Error al generar embeddings: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Error al generar embeddings: {str(e)}"
@@ -141,6 +152,9 @@ class SearchController:
                     search_type=request.get("search_type", "semantic"),
                     embedding_model=request.get("embedding_model", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
                     hybrid_alpha=request.get("hybrid_alpha", 0.5),
+                    expand_query=request.get("expand_query", False),
+                    expansion_terms=request.get("expansion_terms"),
+                    min_score=request.get("min_score"),
                     additional_params=request.get("additional_params")
                 )
                 
@@ -198,7 +212,6 @@ class SearchController:
                     detail=str(e)
                 )
             except Exception as e:
-                logger.error(f"Error al realizar búsqueda: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Error al realizar búsqueda: {str(e)}"
@@ -211,7 +224,6 @@ class SearchController:
                 models = await self.search_service.list_available_models()
                 return {"models": models}
             except Exception as e:
-                logger.error(f"Error al listar modelos: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Error al listar modelos: {str(e)}"

@@ -45,3 +45,9 @@ class DatasetRepository(ABC):
     async def get_dataset_rows(self, dataset_id: UUID, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get paginated rows for a specific dataset"""
         pass 
+
+    @abstractmethod
+    async def get_dataset_row(self, dataset_id: UUID, row_id: UUID) -> Dict[str, Any]:
+        """Get a specific row for a dataset"""
+        pass
+

@@ -35,7 +35,7 @@ class GenerateEmbeddingRequest:
     text: str
     dataset_id: str
     row_id: str
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     batch_id: Optional[UUID] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -45,7 +45,7 @@ class BatchEmbeddingRequest:
     texts: List[str]
     dataset_id: str
     row_ids: List[str]
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     batch_size: int = 32
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -82,7 +82,7 @@ class CreateDatasetRequest:
 class ProcessDatasetRowsRequest:
     dataset_id: str
     rows: Optional[List[Dict[str, Any]]] = None
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     text_fields: Optional[List[str]] = None
     batch_size: int = 32
     force_refresh: bool = False

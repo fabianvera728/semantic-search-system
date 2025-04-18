@@ -136,6 +136,21 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
             except Exception as e:
                 logger.error(f"Error fetching dataset rows: {str(e)}")
                 raise
+
+    async def get_dataset_row(self, dataset_id: UUID, row_id: UUID) -> Dict[str, Any]:
+        async with self._get_session() as session:
+            try:
+                stmt = select(DatasetRowModel).where(DatasetRowModel.id == str(row_id))
+                result = await session.execute(stmt)
+                row_model = result.scalar_one_or_none()
+
+                if not row_model:
+                    raise ValueError(f"Row with ID {row_id} not found")
+                
+                return row_model
+            except Exception as e:
+                raise
+    
     
     async def update(self, dataset: Dataset) -> Dataset:        
         async with self._get_session() as session:

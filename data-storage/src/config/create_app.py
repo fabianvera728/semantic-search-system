@@ -59,7 +59,7 @@ def create_app(config: AppConfig) -> FastAPI:
         allow_headers=["*"],
     )
     
-    app.add_middleware(JWTAuthMiddleware)
+    # app.add_middleware(JWTAuthMiddleware)
     
     # Inicializar el bus de eventos
     setup_event_bus(config)

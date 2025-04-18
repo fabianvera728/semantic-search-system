@@ -71,38 +71,23 @@ async def handle_dataset_created_event(event_data: Dict[str, Any]) -> None:
     Crea un dataset en el embedding-service y procesa sus filas iniciales
     """
     try:
-        # Procesar los valores del evento para convertir cadenas a objetos nativos
         event_data = parse_json_values(event_data)
         
-        # Asegurar que dataset_id sea un string para ambos DTOs
         dataset_id = event_data.get('dataset_id')
         dataset_id_str = str(dataset_id)
         
-        logger.info(f"[✅] Handling dataset.created event for dataset {dataset_id_str}")
-        logger.debug(f"Event data: {json.dumps(event_data, default=str)}")
-        
-        # Obtener el command handler
         command_handlers = get_command_handlers()
         
-        # Crear el dataset en el embedding-service
         create_request = CreateDatasetRequestDTO(
             dataset_id=dataset_id_str,
             name=event_data.get('name', f"Dataset {dataset_id_str}")
         )
         
-        logger.info(f"Creating dataset with ID: {dataset_id_str} (type: string)")
         create_result = await command_handlers.create_dataset_controller.execute(create_request.dict())
         
         if not create_result.success:
-            logger.error(f"Failed to create dataset: {create_result.error}")
             return
-        
-        logger.info(f"Dataset created successfully with ID: {dataset_id_str}")
-        logger.info(f"✅ Successfully processed dataset {dataset_id_str} from event")
-        
-        # NOTA: Evitamos procesar filas inmediatamente para evitar problemas de consistencia
-        # Las filas se procesarán cuando se reciba el evento dataset.rows_added
-        
+
     except Exception as e:
         logger.exception(f"Error handling dataset.created event: {str(e)}")
 
@@ -113,10 +98,6 @@ async def handle_dataset_rows_added_event(event_data: Dict[str, Any]) -> None:
         
         dataset_id = str(event_data.get('dataset_id', ''))
         rows = event_data.get('rows_data', [])
-        
-        logger.info(f"[✅] Handling dataset.rows_added event for dataset {dataset_id}")
-        logger.info(f"[🔍] Event data: {json.dumps(event_data, default=str)}")
-        logger.info(f"[🔍] Rows: {rows}")
         
         command_handlers = get_command_handlers()
 
@@ -133,26 +114,20 @@ async def handle_dataset_rows_added_event(event_data: Dict[str, Any]) -> None:
                         rows=rows
                     )
                     
-                    logger.info(f"Processing rows for dataset ID: {dataset_id} (attempt {attempt+1}/{max_retries})")
                     return await command_handlers.process_dataset_rows_controller.execute(process_request.dict())
                 except Exception as e:
                     if attempt < max_retries - 1:
                         retry_delay = base_delay * (2 ** attempt)
-                        logger.warning(f"Retry {attempt+1}/{max_retries} failed: {str(e)}. Retrying in {retry_delay}s...")
                         await asyncio.sleep(retry_delay)
                         return await process_with_retry(attempt + 1)
                     else:
-                        logger.error(f"Failed to process rows after {max_retries} attempts: {str(e)}")
                         raise
             
             process_result = await process_with_retry()
             
             if not process_result.success:
-                logger.error(f"Failed to process dataset rows: {process_result.error}")
                 return
-                
-            logger.info(f"✅ Successfully processed rows for dataset {dataset_id} from event")
-        
+
         except Exception as e:
             logger.error(f"Error processing rows for dataset {dataset_id}: {str(e)}")
             
@@ -160,12 +135,7 @@ async def handle_dataset_rows_added_event(event_data: Dict[str, Any]) -> None:
         logger.exception(f"Error handling dataset.rows_added event: {str(e)}")
 
 
-# Definir la interfaz abstracta para los consumidores de eventos
 class EventConsumer(ABC):
-    """
-    Interfaz abstracta para consumidores de eventos.
-    Permite implementar diferentes tipos de consumidores (HTTP, RabbitMQ, Kafka, etc.)
-    """
     
     @abstractmethod
     async def setup(self, app: FastAPI, event_handlers: Dict[str, Callable[[Dict[str, Any]], Awaitable[None]]]) -> None:
@@ -184,9 +154,7 @@ class EventConsumer(ABC):
 
 
 class HttpEventConsumer(EventConsumer):
-    """
-    Implementación de EventConsumer que utiliza endpoints HTTP para recibir eventos.
-    """
+
     
     def __init__(self, config: AppConfig):
         self.config = config
@@ -204,10 +172,8 @@ class HttpEventConsumer(EventConsumer):
             event_type = event_data.get('event_type')
             
             if not event_type:
-                logger.error("Received event with no event_type")
                 return {"status": "error", "message": "Missing event_type"}
             
-            logger.info(f"Received event of type: {event_type}")
             
             # Procesar valores JSON para convertir strings a objetos nativos
             processed_data = parse_json_values(event_data)
@@ -294,7 +260,6 @@ class RabbitMQEventConsumer(EventConsumer):
                     break
                 except Exception as e:
                     if attempt < max_retries:
-                        logger.warning(f"Failed to connect to RabbitMQ (attempt {attempt}/{max_retries}): {str(e)}")
                         await asyncio.sleep(retry_delay)
                     else:
                         logger.error(f"Failed to connect to RabbitMQ after {max_retries} attempts: {str(e)}")
@@ -327,8 +292,6 @@ class RabbitMQEventConsumer(EventConsumer):
             # Comenzar a consumir mensajes
             self.consumer_tag = await self.queue.consume(self._process_message)
             
-            logger.info(f"✅ RabbitMQ consumer started, listening for events on queue {self.queue_name}")
-            
         except Exception as e:
             logger.error(f"Error starting RabbitMQ consumer: {str(e)}")
             # Intentar limpiar recursos en caso de error
@@ -336,27 +299,22 @@ class RabbitMQEventConsumer(EventConsumer):
             raise
     
     async def stop(self) -> None:
-        """Detiene el consumo de eventos y cierra la conexión con RabbitMQ"""
         try:
             if self.channel and self.consumer_tag:
-                logger.info(f"Cancelling consumer with tag: {self.consumer_tag}")
                 await self.channel.cancel(self.consumer_tag)
                 self.consumer_tag = None
             
             if self.connection:
-                logger.info("Closing RabbitMQ connection")
                 await self.connection.close()
                 self.connection = None
                 self.channel = None
                 self.exchange = None
                 self.queue = None
                 
-            logger.info("RabbitMQ consumer stopped")
         except Exception as e:
-            logger.error(f"Error stopping RabbitMQ consumer: {str(e)}")
+            raise Exception(f"Error stopping RabbitMQ consumer: {str(e)}")
     
     async def _process_message(self, message: aio_pika.IncomingMessage) -> None:
-        """Procesa un mensaje recibido de RabbitMQ"""
         async with message.process():
             try:
                 event_type = message.routing_key
@@ -368,17 +326,12 @@ class RabbitMQEventConsumer(EventConsumer):
                 handler = self.event_handlers.get(event_type)
                 
                 if not handler:
-                    logger.warning(f"No handler registered for event type: {event_type}")
                     return
                 
-                # Ejecutar el manejador
-                logger.info(f"Processing event {event_type} with handler: {handler.__name__}")
                 await handler(event_data)
-                logger.info(f"✅ Event {event_type} processed successfully")
                 
             except json.JSONDecodeError as je:
-                logger.error(f"Received invalid JSON in message body: {str(je)}")
-                logger.error(f"Raw message body: {message.body.decode()[:500]}")
+                raise
             except Exception as e:
                 logger.exception(f"Error processing RabbitMQ message: {str(e)}")
 

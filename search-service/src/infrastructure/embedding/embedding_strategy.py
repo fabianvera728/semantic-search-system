@@ -111,12 +111,9 @@ class UniversalSentenceEncoderStrategy(EmbeddingStrategy):
             raise
     
     def generate_embeddings(self, texts: List[str], **kwargs) -> np.ndarray:
-        """Genera embeddings para una lista de textos"""
-        # Verificar si hay textos
         if not texts:
             return np.array([], dtype=np.float32)
         
-        # Generar embeddings
         embeddings = self.model(texts).numpy()
         
         return embeddings

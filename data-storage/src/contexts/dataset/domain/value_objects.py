@@ -52,3 +52,9 @@ class GetDatasetRowsRequest:
     dataset_id: UUID
     limit: int = 100
     offset: int = 0 
+
+
+@dataclass(frozen=True)
+class GetDatasetRowRequest:
+    dataset_id: UUID
+    row_id: UUID

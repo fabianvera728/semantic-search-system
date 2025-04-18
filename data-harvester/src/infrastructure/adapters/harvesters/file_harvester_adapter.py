@@ -9,11 +9,6 @@ from src.domain.ports.harvester_port import HarvesterPort
 
 
 class FileHarvesterAdapter(HarvesterPort):
-    """
-    Adaptador que implementa la cosecha de datos desde archivos.
-    
-    Este adaptador soporta la cosecha de datos desde archivos CSV y JSON.
-    """
     
     async def harvest(self, config: Dict[str, Any]) -> HarvestedData:
         """

@@ -41,7 +41,7 @@ def embedding_to_dto(embedding: Embedding, include_vector: bool = True) -> Embed
         embedding_id=embedding.id,
         dataset_id=embedding.dataset_id,
         row_id=embedding.row_id,
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         dimension=embedding.vector.shape[0] if embedding.vector is not None else 0,
         created_at=embedding.created_at,
         vector=vector,
@@ -66,8 +66,7 @@ def embedding_result_to_dto(result: EmbeddingResult) -> EmbeddingResultDTO:
 
 def dataset_to_dto(dataset: Dataset) -> DatasetDTO:
     """Convert a domain Dataset to a DatasetDTO."""
-    # Obtener dimensión desde los metadatos
-    dimension = 384  # valor por defecto
+    dimension = 384
     if dataset.metadata and 'dimension' in dataset.metadata:
         dimension = dataset.metadata['dimension']
         

@@ -129,31 +129,21 @@ class RabbitMQMessageBroker(MessageBroker):
             await self.connect()
         
         try:
-            # Convertir el evento a un diccionario y luego a JSON
             event_data = asdict(event)
             
-            # Usar el encoder personalizado para manejar todos los tipos de datos
             event_json = json.dumps(event_data, cls=CustomJSONEncoder)
             
-            logger.info(f"📤 Publishing event {event.event_type} with ID: {event.event_id}")
-            logger.debug(f"Event data: {event_json[:200]}...")
-            
-            # Crear un mensaje con el contenido JSON
             message = aio_pika.Message(
                 body=event_json.encode(),
                 content_type="application/json",
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT  # Mensajes persistentes para mayor fiabilidad
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT 
             )
             
-            # Publicar el mensaje con la clave de enrutamiento igual al tipo de evento
             routing_key = event.event_type
             await self.exchange.publish(message, routing_key=routing_key)
-            
-            logger.info(f"✅ Event {event.event_type} with ID {event.event_id} published successfully to exchange {self.exchange_name} with routing key {routing_key}")
+        
         except Exception as e:
             logger.error(f"❌ Error publishing event to RabbitMQ: {str(e)}")
-            # Intentar reconectar en caso de error
             logger.info("Attempting to reconnect to RabbitMQ...")
             await self.disconnect()
             await self.connect()
-            # No reintentamos publicar aquí para evitar bucles infinitos 
