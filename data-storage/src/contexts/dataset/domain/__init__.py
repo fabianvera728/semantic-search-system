@@ -5,7 +5,9 @@ from .value_objects import (
     UpdateDatasetRequest,
     AddRowRequest,
     AddColumnRequest,
-    GetDatasetRowsRequest
+    GetDatasetRowsRequest,
+    EmbeddingPromptTemplate,
+    EmbeddingPromptStrategy
 )
 from .exceptions import (
     DatasetException,
@@ -32,6 +34,7 @@ __all__ = [
     # Value Objects
     "CreateDatasetRequest", "UpdateDatasetRequest", 
     "AddRowRequest", "AddColumnRequest", "GetDatasetRowsRequest",
+    "EmbeddingPromptTemplate", "EmbeddingPromptStrategy",
     
     # Exceptions
     "DatasetException", "DatasetNotFoundError", "DatasetValidationError",

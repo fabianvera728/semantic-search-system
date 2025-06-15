@@ -11,10 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Download spaCy model
-RUN python -m spacy download en_core_web_md
+RUN python -m spacy download es_core_news_md
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/storage/chroma

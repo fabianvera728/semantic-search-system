@@ -48,13 +48,17 @@ class DatasetService:
             dataset.add_column(column)
 
         for row_data in request.rows:
-            logger.info(f"row_data: {row_data}")
             row = DatasetRow(data=row_data)
             dataset.add_row(row)
 
         saved_dataset = await self.repository.save(dataset)
         
-        await self._publish_dataset_created_event(saved_dataset)
+        # Convertir prompt strategy a dict si existe
+        prompt_strategy_dict = None
+        if request.prompt_strategy:
+            prompt_strategy_dict = self._convert_prompt_strategy_to_dict(request.prompt_strategy)
+        
+        await self._publish_dataset_created_event(saved_dataset, prompt_strategy_dict)
         
         row_data_with_ids = []
         for i, saved_row in enumerate(saved_dataset.rows):
@@ -68,7 +72,8 @@ class DatasetService:
         if request.rows and len(request.rows) > 0:
             await self._publish_rows_added_event(
                 saved_dataset,
-                row_data_with_ids
+                row_data_with_ids,
+                prompt_strategy_dict
             )
         
         return saved_dataset
@@ -82,7 +87,6 @@ class DatasetService:
         if not dataset:
             raise DatasetNotFoundError(dataset_id)
 
-        # Verificar acceso si no es público y se proporciona un user_id
         if not dataset.is_public and user_id and user_id != dataset.user_id:
             raise UnauthorizedAccessError()
 
@@ -188,7 +192,8 @@ class DatasetService:
         updated_dataset = await self.repository.save(dataset)
         
         # Publicar evento de filas añadidas
-        await self._publish_rows_added_event(updated_dataset, [request.data])
+        # Para add_row individual, no tenemos prompt_strategy disponible, usar None
+        await self._publish_rows_added_event(updated_dataset, [request.data], None)
         
         return updated_dataset
 
@@ -216,9 +221,30 @@ class DatasetService:
         
         return updated_dataset
     
+    # Métodos privados para conversión de datos
+    
+    def _convert_prompt_strategy_to_dict(self, prompt_strategy) -> Dict[str, Any]:
+        """Convierte EmbeddingPromptStrategy a dict para serialización"""
+        result = {
+            "strategy_type": prompt_strategy.strategy_type
+        }
+        
+        if prompt_strategy.simple_prompt:
+            result["simple_prompt"] = prompt_strategy.simple_prompt
+            
+        if prompt_strategy.prompt_template:
+            result["prompt_template"] = {
+                "template": prompt_strategy.prompt_template.template,
+                "description": prompt_strategy.prompt_template.description,
+                "field_mappings": prompt_strategy.prompt_template.field_mappings,
+                "metadata": prompt_strategy.prompt_template.metadata
+            }
+            
+        return result
+    
     # Métodos privados para publicar eventos
     
-    async def _publish_dataset_created_event(self, dataset: Dataset) -> None:
+    async def _publish_dataset_created_event(self, dataset: Dataset, prompt_strategy: Optional[Dict[str, Any]] = None) -> None:
         """Publica un evento cuando se crea un dataset"""
         event = DatasetCreatedEvent(
             event_id=uuid4(),
@@ -231,11 +257,12 @@ class DatasetService:
             row_count=dataset.row_count,
             column_count=dataset.column_count,
             tags=dataset.tags,
-            is_public=dataset.is_public
+            is_public=dataset.is_public,
+            prompt_strategy=prompt_strategy
         )
         
         await self.event_bus.publish(event)
-        logger.info(f"Published dataset.created event for dataset {dataset.id}")
+        logger.info(f"Published dataset.created event for dataset {dataset.id} with prompt_strategy: {bool(prompt_strategy)}")
         
     async def _publish_dataset_updated_event(self, dataset: Dataset, request: UpdateDatasetRequest) -> None:
         """Publica un evento cuando se actualiza un dataset"""
@@ -253,7 +280,7 @@ class DatasetService:
         await self.event_bus.publish(event)
         logger.info(f"Published dataset.updated event for dataset {dataset.id}")
         
-    async def _publish_rows_added_event(self, dataset: Dataset, rows_data: List[Dict[str, Any]]) -> None:
+    async def _publish_rows_added_event(self, dataset: Dataset, rows_data: List[Dict[str, Any]], prompt_strategy: Optional[Dict[str, Any]] = None) -> None:
         """Publica un evento cuando se añaden filas a un dataset"""
         event = DatasetRowsAddedEvent(
             event_id=uuid4(),
@@ -261,11 +288,12 @@ class DatasetService:
             event_type="dataset.rows_added",
             dataset_id=dataset.id,
             row_count=len(rows_data),
-            rows_data=rows_data
+            rows_data=rows_data,
+            prompt_strategy=prompt_strategy
         )
         
         await self.event_bus.publish(event)
-        logger.info(f"Published dataset.rows_added event for dataset {dataset.id}")
+        logger.info(f"Published dataset.rows_added event for dataset {dataset.id} with prompt_strategy: {bool(prompt_strategy)}")
         
     async def _publish_columns_added_event(self, dataset: Dataset, columns_data: List[Dict[str, Any]]) -> None:
         """Publica un evento cuando se añaden columnas a un dataset"""

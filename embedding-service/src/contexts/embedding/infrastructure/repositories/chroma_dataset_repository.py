@@ -44,7 +44,26 @@ class ChromaDatasetRepository(DatasetRepository):
         }
         
         if request.metadata and isinstance(request.metadata, dict) and len(request.metadata) > 0:
-            metadata.update(request.metadata)
+            # Filtrar metadatos para ChromaDB - solo tipos primitivos permitidos
+            filtered_metadata = {}
+            for key, value in request.metadata.items():
+                # Excluir prompt_strategy ya que es un dict complejo
+                if key == 'prompt_strategy':
+                    # Solo guardar el tipo de estrategia como string
+                    if isinstance(value, dict) and 'strategy_type' in value:
+                        filtered_metadata['prompt_strategy_type'] = str(value['strategy_type'])
+                    continue
+                
+                # Solo incluir tipos primitivos que ChromaDB acepta
+                if isinstance(value, (str, int, float, bool)):
+                    filtered_metadata[key] = value
+                elif value is None:
+                    filtered_metadata[key] = "null"
+                else:
+                    # Convertir otros tipos a string
+                    filtered_metadata[key] = str(value)
+            
+            metadata.update(filtered_metadata)
         else:
             metadata["custom_data"] = "true"
             
@@ -87,10 +106,14 @@ class ChromaDatasetRepository(DatasetRepository):
         try:
             client = await self.get_chroma_client()
             
+            # Metadatos filtrados para ChromaDB (solo tipos primitivos)
             collection_metadata = await self._prepare_dataset_metadata(request)
             collection_name = self._get_dataset_collection_name(request.dataset_id)
             
             await self._get_or_create_collection(client, collection_name, collection_metadata)
+            
+            # El Dataset mantiene todos los metadatos originales, incluyendo prompt_strategy
+            dataset_metadata = request.metadata or {}
             
             dataset = Dataset(
                 id=request.dataset_id,
@@ -98,7 +121,7 @@ class ChromaDatasetRepository(DatasetRepository):
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
                 embedding_count=0,
-                metadata=collection_metadata
+                metadata=dataset_metadata  # Usar metadatos originales completos
             )
             
             await self._save_dataset_metadata(client, dataset, request.dimension)

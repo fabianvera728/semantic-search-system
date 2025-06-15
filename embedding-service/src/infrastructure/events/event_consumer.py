@@ -78,15 +78,28 @@ async def handle_dataset_created_event(event_data: Dict[str, Any]) -> None:
         
         command_handlers = get_command_handlers()
         
+        # Extraer información de prompt strategy si existe
+        prompt_strategy = event_data.get('prompt_strategy')
+        
+        # Crear metadata incluyendo prompt_strategy si existe
+        metadata = {}
+        if prompt_strategy:
+            metadata['prompt_strategy'] = prompt_strategy
+            logger.info(f"Dataset {dataset_id_str} has prompt strategy: {prompt_strategy.get('strategy_type', 'unknown')}")
+        
         create_request = CreateDatasetRequestDTO(
             dataset_id=dataset_id_str,
-            name=event_data.get('name', f"Dataset {dataset_id_str}")
+            name=event_data.get('name', f"Dataset {dataset_id_str}"),
+            metadata=metadata
         )
         
         create_result = await command_handlers.create_dataset_controller.execute(create_request.dict())
         
         if not create_result.success:
+            logger.error(f"Failed to create dataset {dataset_id_str}: {create_result.error}")
             return
+        
+        logger.info(f"Successfully created dataset {dataset_id_str} with prompt strategy: {bool(prompt_strategy)}")
 
     except Exception as e:
         logger.exception(f"Error handling dataset.created event: {str(e)}")
@@ -98,21 +111,32 @@ async def handle_dataset_rows_added_event(event_data: Dict[str, Any]) -> None:
         
         dataset_id = str(event_data.get('dataset_id', ''))
         rows = event_data.get('rows_data', [])
+        prompt_strategy_data = event_data.get('prompt_strategy')
         
         command_handlers = get_command_handlers()
 
         try:
-            logger.info(f"Ensuring dataset {dataset_id} exists before processing rows")
+            logger.info(f"Processing {len(rows)} rows for dataset {dataset_id} with prompt_strategy: {bool(prompt_strategy_data)}")
             
             max_retries = 3
             base_delay = 0.5
             
             async def process_with_retry(attempt=0):
                 try:
-                    process_request = ProcessDatasetRowsRequestDTO(
-                        dataset_id=dataset_id,
-                        rows=rows
-                    )
+                    # Crear el request con prompt_strategy si está disponible
+                    process_request_data = {
+                        "dataset_id": dataset_id,
+                        "rows": rows
+                    }
+                    
+                    # Agregar prompt_strategy si está disponible en el evento
+                    if prompt_strategy_data:
+                        from ...contexts.embedding.application.mappers import dict_to_prompt_strategy_dto
+                        prompt_strategy_dto = dict_to_prompt_strategy_dto(prompt_strategy_data)
+                        process_request_data["prompt_strategy"] = prompt_strategy_dto
+                        logger.info(f"Using prompt strategy from event: {prompt_strategy_data.get('strategy_type', 'unknown')}")
+                    
+                    process_request = ProcessDatasetRowsRequestDTO(**process_request_data)
                     
                     return await command_handlers.process_dataset_rows_controller.execute(process_request.dict())
                 except Exception as e:
@@ -126,7 +150,10 @@ async def handle_dataset_rows_added_event(event_data: Dict[str, Any]) -> None:
             process_result = await process_with_retry()
             
             if not process_result.success:
+                logger.error(f"Failed to process rows for dataset {dataset_id}: {process_result.error}")
                 return
+            
+            logger.info(f"Successfully processed {len(rows)} rows for dataset {dataset_id}")
 
         except Exception as e:
             logger.error(f"Error processing rows for dataset {dataset_id}: {str(e)}")

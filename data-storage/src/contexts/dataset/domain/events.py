@@ -21,6 +21,8 @@ class DatasetCreatedEvent(DomainEvent):
     column_count: int
     tags: List[str]
     is_public: bool
+    # Nueva funcionalidad para embeddings contextuales
+    prompt_strategy: Optional[Dict[str, Any]] = None
     
 
 @dataclass
@@ -37,6 +39,8 @@ class DatasetRowsAddedEvent(DomainEvent):
     dataset_id: UUID
     row_count: int
     rows_data: List[Dict[str, Any]]
+    # Nueva funcionalidad para embeddings contextuales
+    prompt_strategy: Optional[Dict[str, Any]] = None
 
 
 @dataclass

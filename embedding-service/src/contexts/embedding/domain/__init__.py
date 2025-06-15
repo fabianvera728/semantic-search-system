@@ -24,7 +24,9 @@ from .value_objects import (
     ListEmbeddingsRequest,
     CreateDatasetRequest,
     ProcessDatasetRowsRequest,
-    EmbeddingResult
+    EmbeddingResult,
+    EmbeddingPromptTemplate,
+    EmbeddingPromptStrategy
 )
 
 __all__ = [
@@ -58,5 +60,7 @@ __all__ = [
     'ListEmbeddingsRequest',
     'CreateDatasetRequest',
     'ProcessDatasetRowsRequest',
-    'EmbeddingResult'
+    'EmbeddingResult',
+    'EmbeddingPromptTemplate',
+    'EmbeddingPromptStrategy'
 ] 

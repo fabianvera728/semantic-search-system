@@ -184,6 +184,13 @@ services:
       context: ./embedding-service
       dockerfile: Dockerfile
     container_name: embedding-service
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     expose:
       - "8005"
     environment:
@@ -193,7 +200,7 @@ services:
       - EMBEDDING_SERVICE_LOG_LEVEL=INFO
       - AUTH_SERVICE_URL=http://auth-service:8001
       - DATA_STORAGE_URL=http://data-storage:8003
-      - EMBEDDING_SERVICE_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_SERVICE_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
       - VECTOR_DB_TYPE=chromadb
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
@@ -224,6 +231,13 @@ services:
       context: ./search-service
       dockerfile: Dockerfile
     container_name: search-service
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     expose:
       - "8006"
     environment:
@@ -236,7 +250,7 @@ services:
       - SEARCH_SERVICE_LOG_FILE=/app/logs/search-service.log
       - DATA_STORAGE_URL=http://data-storage:8003
       - DATA_PROCESSOR_URL=http://data-processor:8004
-      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
       - VECTOR_DB_TYPE=chromadb
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000

@@ -11,7 +11,9 @@ from .dtos import (
     ListEmbeddingsRequestDTO,
     CreateDatasetRequestDTO,
     ProcessDatasetRowsRequestDTO,
-    EmbeddingModelDTO
+    EmbeddingModelDTO,
+    EmbeddingPromptTemplateDTO,
+    EmbeddingPromptStrategyDTO
 )
 from .mappers import (
     # Domain to DTO
@@ -23,6 +25,13 @@ from .mappers import (
     embedding_results_to_dtos,
     datasets_to_dtos,
     embedding_models_to_dtos,
+    
+    # Prompt mappers
+    prompt_template_to_dto,
+    prompt_strategy_to_dto,
+    prompt_template_dto_to_domain,
+    prompt_strategy_dto_to_domain,
+    dict_to_prompt_strategy_dto,
     
     # DTO to Domain
     generate_embedding_dto_to_domain,
@@ -56,6 +65,8 @@ __all__ = [
     "CreateDatasetRequestDTO",
     "ProcessDatasetRowsRequestDTO",
     "EmbeddingModelDTO",
+    "EmbeddingPromptTemplateDTO",
+    "EmbeddingPromptStrategyDTO",
     
     # Mappers - Domain to DTO
     "embedding_to_dto",
@@ -66,6 +77,13 @@ __all__ = [
     "embedding_results_to_dtos",
     "datasets_to_dtos",
     "embedding_models_to_dtos",
+    
+    # Prompt mappers
+    "prompt_template_to_dto",
+    "prompt_strategy_to_dto", 
+    "prompt_template_dto_to_domain",
+    "prompt_strategy_dto_to_domain",
+    "dict_to_prompt_strategy_dto",
     
     # Mappers - DTO to Domain
     "generate_embedding_dto_to_domain",

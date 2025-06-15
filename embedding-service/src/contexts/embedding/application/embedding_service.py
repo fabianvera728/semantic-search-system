@@ -113,6 +113,9 @@ class EmbeddingService:
             dataset = await self.dataset_repository.get_dataset(dataset_id)
             text_fields = request.text_fields or []
             
+            # La prompt strategy ahora viene directamente en el request desde el evento
+            prompt_strategy = request.prompt_strategy
+            
             if not text_fields and rows:
                 sample_row = rows[0]
                 
@@ -120,15 +123,17 @@ class EmbeddingService:
                     if isinstance(value, str) and field != "id" and len(value.strip()) > 0:
                         text_fields.append(field)
             
-            if not text_fields:
+            if not text_fields and not prompt_strategy:
                 return {
                     "success": False,
                     "processed": 0,
                     "errors": 0,
-                    "message": "No text fields found"
+                    "message": "No text fields found and no prompt strategy available"
                 }
         
         except Exception as e:
+            dataset = None
+            prompt_strategy = request.prompt_strategy
             rows = []
         
         results = []
@@ -149,18 +154,23 @@ class EmbeddingService:
                     if not row_id:
                         continue
                     
-                    if request.text_fields:
-                        text_content = " ".join([
-                            str(row.get(field, "")) 
-                            for field in request.text_fields 
-                            if field in row and row.get(field)
-                        ])
+                    # Nueva funcionalidad: usar prompt strategy si está disponible
+                    if prompt_strategy:
+                        text_content = self._generate_contextual_content(row, request)
                     else:
-                        text_content = " ".join([
-                            str(value) 
-                            for key, value in row.items() 
-                            if isinstance(value, str) and key != "id"
-                        ])
+                        # Lógica existente como fallback
+                        if request.text_fields:
+                            text_content = " ".join([
+                                str(row.get(field, "")) 
+                                for field in request.text_fields 
+                                if field in row and row.get(field)
+                            ])
+                        else:
+                            text_content = " ".join([
+                                str(value) 
+                                for key, value in row.items() 
+                                if isinstance(value, str) and key != "id"
+                            ])
                     
                     if text_content.strip():
                         texts.append(text_content)
@@ -276,6 +286,51 @@ class EmbeddingService:
             logger.error(f"Failed to create dataset: {str(create_err)}")
         
         return None
+    
+    def _convert_dict_to_prompt_strategy(self, prompt_strategy_data: Dict[str, Any]):
+        """Convierte un dict de prompt strategy a domain object"""
+        from ..domain.value_objects import EmbeddingPromptStrategy, EmbeddingPromptTemplate
+        
+        prompt_template = None
+        if prompt_strategy_data.get('prompt_template'):
+            template_data = prompt_strategy_data['prompt_template']
+            prompt_template = EmbeddingPromptTemplate(
+                template=template_data.get('template', ''),
+                description=template_data.get('description', ''),
+                field_mappings=template_data.get('field_mappings', {}),
+                metadata=template_data.get('metadata', {})
+            )
+        
+        return EmbeddingPromptStrategy(
+            strategy_type=prompt_strategy_data.get('strategy_type', 'concatenate'),
+            simple_prompt=prompt_strategy_data.get('simple_prompt'),
+            prompt_template=prompt_template
+        )
+    
+    def _generate_contextual_content(self, row_data: Dict[str, Any], request: ProcessDatasetRowsRequest) -> str:
+        """Genera contenido contextualizado usando la estrategia de prompt configurada"""
+        if not request.prompt_strategy:
+            return ""
+        
+        try:
+            content = request.prompt_strategy.generate_content(row_data, request.text_fields)
+            logger.debug(f"Generated contextual content for row {row_data.get('id', 'unknown')}: {content[:100]}...")
+            return content
+        except Exception as e:
+            logger.error(f"Error generating contextual content: {str(e)}")
+            # Fallback a concatenación simple si hay error
+            if request.text_fields:
+                return " ".join([
+                    str(row_data.get(field, "")) 
+                    for field in request.text_fields 
+                    if field in row_data and row_data.get(field)
+                ])
+            else:
+                return " ".join([
+                    str(value) 
+                    for key, value in row_data.items() 
+                    if isinstance(value, str) and key != "id" and value
+                ])
     
     async def get_embedding(self, request: GetEmbeddingRequest) -> Embedding:
         """Get a single embedding"""

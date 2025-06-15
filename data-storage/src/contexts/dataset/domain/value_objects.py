@@ -13,6 +13,24 @@ class UserId:
     value: str
 
 
+# Value Objects para Embeddings Contextuales
+@dataclass(frozen=True)
+class EmbeddingPromptTemplate:
+    """Template para generar texto contextualizado para embeddings"""
+    template: str
+    description: str
+    field_mappings: Dict[str, str]
+    metadata: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class EmbeddingPromptStrategy:
+    """Estrategia para generar contenido contextualizado"""
+    strategy_type: Literal["concatenate", "simple_prompt", "template"]
+    simple_prompt: Optional[str] = None
+    prompt_template: Optional[EmbeddingPromptTemplate] = None
+
+
 @dataclass(frozen=True)
 class CreateDatasetRequest:
     name: str
@@ -22,6 +40,8 @@ class CreateDatasetRequest:
     is_public: bool
     columns: List[Dict[str, Any]]
     rows: List[Dict[str, Any]]
+    # Nueva funcionalidad para prompts contextuales
+    prompt_strategy: Optional[EmbeddingPromptStrategy] = None
 
 
 @dataclass(frozen=True)

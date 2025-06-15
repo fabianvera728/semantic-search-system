@@ -76,6 +76,20 @@ class PaginationParams(BaseModel):
     offset: int = Query(0, ge=0)
 
 
+# Schemas para Embeddings Contextuales
+class EmbeddingPromptTemplateSchema(BaseModel):
+    template: str
+    description: str
+    field_mappings: Dict[str, str] = {}
+    metadata: Dict[str, Any] = {}
+
+
+class EmbeddingPromptStrategySchema(BaseModel):
+    strategy_type: str  # "concatenate", "simple_prompt", "template"
+    simple_prompt: Optional[str] = None
+    prompt_template: Optional[EmbeddingPromptTemplateSchema] = None
+
+
 class CreateDatasetSchema(BaseModel):
     name: str
     description: str
@@ -83,6 +97,8 @@ class CreateDatasetSchema(BaseModel):
     is_public: bool
     columns: List[Dict[str, Any]]
     rows: List[Dict[str, Any]]
+    # Nueva funcionalidad para prompts contextuales
+    prompt_strategy: Optional[EmbeddingPromptStrategySchema] = None
 
 
 class UpdateDatasetSchema(BaseModel):
@@ -115,6 +131,11 @@ class DatasetController:
             user_id: str = Depends(get_current_user_id)
         ):
             try:
+                # Convertir prompt strategy si existe
+                prompt_strategy = None
+                if dataset.prompt_strategy:
+                    prompt_strategy = self._convert_prompt_strategy_schema_to_domain(dataset.prompt_strategy)
+                
                 request = CreateDatasetRequest(
                     name=dataset.name,
                     description=dataset.description,
@@ -122,7 +143,8 @@ class DatasetController:
                     tags=dataset.tags,
                     is_public=dataset.is_public,
                     columns=dataset.columns,
-                    rows=dataset.rows
+                    rows=dataset.rows,
+                    prompt_strategy=prompt_strategy
                 )
                 result = await self.dataset_service.create_dataset(request)
                 return self._entity_to_schema(result)
@@ -402,4 +424,23 @@ class DatasetController:
 
         base_schema["rows"] = []
         
-        return base_schema 
+        return base_schema
+    
+    def _convert_prompt_strategy_schema_to_domain(self, schema: EmbeddingPromptStrategySchema):
+        """Convierte EmbeddingPromptStrategySchema a domain object"""
+        from ...contexts.dataset.domain.value_objects import EmbeddingPromptStrategy, EmbeddingPromptTemplate
+        
+        prompt_template = None
+        if schema.prompt_template:
+            prompt_template = EmbeddingPromptTemplate(
+                template=schema.prompt_template.template,
+                description=schema.prompt_template.description,
+                field_mappings=schema.prompt_template.field_mappings,
+                metadata=schema.prompt_template.metadata
+            )
+        
+        return EmbeddingPromptStrategy(
+            strategy_type=schema.strategy_type,
+            simple_prompt=schema.simple_prompt,
+            prompt_template=prompt_template
+        ) 

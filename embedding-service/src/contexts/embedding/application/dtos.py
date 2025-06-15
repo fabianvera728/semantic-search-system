@@ -1,7 +1,22 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
+
+
+class EmbeddingPromptTemplateDTO(BaseModel):
+    """DTO para template de prompts contextuales"""
+    template: str
+    description: str
+    field_mappings: Optional[Dict[str, str]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class EmbeddingPromptStrategyDTO(BaseModel):
+    """DTO para estrategia de generación de contenido contextual"""
+    strategy_type: Literal["concatenate", "simple_prompt", "template"] = "concatenate"
+    simple_prompt: Optional[str] = None
+    prompt_template: Optional[EmbeddingPromptTemplateDTO] = None
 
 
 class EmbeddingDTO(BaseModel):
@@ -91,6 +106,8 @@ class ProcessDatasetRowsRequestDTO(BaseModel):
     model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"    
     rows: Optional[List[Dict[str, Any]]] = None
     batch_size: int = 32
+    # Nueva funcionalidad para prompts contextuales
+    prompt_strategy: Optional[EmbeddingPromptStrategyDTO] = None
 
 
 class EmbeddingModelDTO(BaseModel):
