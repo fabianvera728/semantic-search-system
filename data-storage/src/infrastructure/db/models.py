@@ -24,6 +24,7 @@ class Dataset(Base):
     column_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tags: Mapped[dict] = mapped_column(JSON, nullable=False, default=list)
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    prompt_strategy: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     
     columns: Mapped[List["DatasetColumn"]] = relationship("DatasetColumn", back_populates="dataset", cascade="all, delete-orphan")
     rows: Mapped[List["DatasetRow"]] = relationship("DatasetRow", back_populates="dataset", cascade="all, delete-orphan")

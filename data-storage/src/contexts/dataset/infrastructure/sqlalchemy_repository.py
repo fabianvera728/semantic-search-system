@@ -38,7 +38,8 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                     row_count=dataset.row_count,
                     column_count=dataset.column_count,
                     tags=dataset.tags,
-                    is_public=dataset.is_public
+                    is_public=dataset.is_public,
+                    prompt_strategy=dataset.prompt_strategy
                 )
                 
                 session.add(dataset_model)
@@ -169,6 +170,7 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
             dataset_model.column_count = dataset.column_count
             dataset_model.tags = dataset.tags
             dataset_model.is_public = dataset.is_public
+            dataset_model.prompt_strategy = dataset.prompt_strategy
             
             await session.execute(delete(DatasetColumnModel).where(DatasetColumnModel.dataset_id == str(dataset.id)))
             
@@ -231,7 +233,8 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                 row_count=model.row_count,
                 column_count=model.column_count,
                 tags=model.tags if model.tags is not None else [],
-                is_public=model.is_public
+                is_public=model.is_public,
+                prompt_strategy=model.prompt_strategy
             )
             
             # Always load columns since they're part of the schema definition
@@ -267,7 +270,8 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
                 row_count=model.row_count,
                 column_count=model.column_count,
                 tags=model.tags if model.tags is not None else [],
-                is_public=model.is_public
+                is_public=model.is_public,
+                prompt_strategy=model.prompt_strategy
             )
             
             if hasattr(model, 'columns') and model.columns is not None:

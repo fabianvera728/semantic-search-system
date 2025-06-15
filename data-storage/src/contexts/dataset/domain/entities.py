@@ -32,6 +32,7 @@ class Dataset:
     is_public: bool = False
     columns: List[DatasetColumn] = field(default_factory=list)
     rows: List[DatasetRow] = field(default_factory=list)
+    prompt_strategy: Optional[Dict[str, Any]] = None
 
     def add_row(self, row: DatasetRow) -> None:
         """Add a row to the dataset and update the row count"""

@@ -31,12 +31,17 @@ class DatasetService:
         self.event_bus = get_event_bus()
 
     async def create_dataset(self, request: CreateDatasetRequest) -> Dataset:
+        prompt_strategy_dict = None
+        if request.prompt_strategy:
+            prompt_strategy_dict = self._convert_prompt_strategy_to_dict(request.prompt_strategy)
+            
         dataset = Dataset(
             name=request.name,
             description=request.description,
             user_id=request.user_id,
             tags=request.tags,
-            is_public=request.is_public
+            is_public=request.is_public,
+            prompt_strategy=prompt_strategy_dict
         )
 
         for column_data in request.columns:
@@ -52,11 +57,6 @@ class DatasetService:
             dataset.add_row(row)
 
         saved_dataset = await self.repository.save(dataset)
-        
-        # Convertir prompt strategy a dict si existe
-        prompt_strategy_dict = None
-        if request.prompt_strategy:
-            prompt_strategy_dict = self._convert_prompt_strategy_to_dict(request.prompt_strategy)
         
         await self._publish_dataset_created_event(saved_dataset, prompt_strategy_dict)
         
