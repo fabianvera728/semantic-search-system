@@ -70,7 +70,7 @@ def get_app_config() -> AppConfig:
     rabbitmq_url = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
     rabbitmq_exchange = os.getenv("RABBITMQ_EXCHANGE", "semantic_search_events")
     
-    log_level = os.getenv("DATA_STORAGE_LOG_LEVEL", "INFO")
+    log_level = os.getenv("DATA_STORAGE_LOG_LEVEL", "DEBUG")
     log_file = os.getenv("DATA_STORAGE_LOG_FILE")
     
     return AppConfig(

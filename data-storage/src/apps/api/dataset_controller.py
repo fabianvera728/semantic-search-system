@@ -16,6 +16,15 @@ from ...middleware import get_current_user_id
 import logging
 logger = logging.getLogger(__name__)
 
+# Función auxiliar para obtener user_id con fallback
+async def get_user_id_optional() -> str:
+    """Obtiene el user_id del token JWT, o usa un valor por defecto si no hay autenticación."""
+    try:
+        return await get_current_user_id()
+    except Exception:
+        # Si no hay autenticación, usar un user_id por defecto para servicios internos
+        return "system-service"
+
 
 class DatasetColumnSchema(BaseModel):
     id: str
@@ -186,7 +195,7 @@ class DatasetController:
         @self.router.get("/{dataset_id}", response_model=DatasetDetailSchema)
         async def get_dataset(
             dataset_id: UUID = Path(...),
-            user_id: str = Depends(get_current_user_id)
+            user_id: str = Depends(get_user_id_optional)
         ):
             try:
                 dataset = await self.dataset_service.get_dataset(dataset_id, user_id)
@@ -339,26 +348,43 @@ class DatasetController:
         async def add_row(
             row: AddRowSchema,
             dataset_id: UUID = Path(...),
-            user_id: str = Depends(get_current_user_id)
+            user_id: str = Depends(get_user_id_optional)
         ):
+            logger.info(f"🔍 ADD_ROW - Inicio: dataset_id={dataset_id}, user_id={user_id}")
+            logger.info(f"🔍 ADD_ROW - Datos recibidos: {row.data}")
+            logger.info(f"🔍 ADD_ROW - Tipo de datos: {type(row.data)}")
+            
             try:
                 request = AddRowRequest(
                     dataset_id=dataset_id,
                     data=row.data
                 )
+                logger.info(f"🔍 ADD_ROW - Request creado: dataset_id={request.dataset_id}")
+                logger.info(f"🔍 ADD_ROW - Request data: {request.data}")
+                
                 result = await self.dataset_service.add_row(request, user_id)
+                logger.info(f"🔍 ADD_ROW - Resultado exitoso: dataset_id={result.id}, row_count={result.row_count}")
+                
                 return self._entity_to_detail_schema(result)
-            except DatasetNotFoundError:
+            except DatasetNotFoundError as e:
+                logger.error(f"❌ ADD_ROW - Dataset not found: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Dataset with ID {dataset_id} not found"
                 )
-            except UnauthorizedAccessError:
+            except UnauthorizedAccessError as e:
+                logger.error(f"❌ ADD_ROW - Unauthorized: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"You don't have permission to modify this dataset"
                 )
             except Exception as e:
+                logger.error(f"❌ ADD_ROW - Error interno: {type(e).__name__}: {str(e)}")
+                logger.error(f"❌ ADD_ROW - Dataset ID: {dataset_id}")
+                logger.error(f"❌ ADD_ROW - User ID: {user_id}")
+                logger.error(f"❌ ADD_ROW - Row data: {row.data}")
+                import traceback
+                logger.error(f"❌ ADD_ROW - Traceback: {traceback.format_exc()}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=str(e)

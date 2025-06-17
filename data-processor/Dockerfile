@@ -16,8 +16,12 @@ RUN pip install -r requirements.txt
 # Copy application code
 COPY . .
 
-# Expose port
-EXPOSE 8000
+# Expose port (default to 8004)
+EXPOSE 8004
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 
+# Set default environment variables
+ENV DATA_PROCESSOR_HOST=0.0.0.0
+ENV DATA_PROCESSOR_PORT=8004
+
+# Run the application using environment variables
+CMD ["python", "main.py"] 

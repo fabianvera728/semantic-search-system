@@ -14,8 +14,8 @@ logger = logging.getLogger("api-gateway")
 
 app = FastAPI(
     title="API Gateway",
-    description="API Gateway para el sistema de búsqueda semántica",
-    version="1.0.0"
+    description="API Gateway para el sistema de búsqueda semántica - Solo Proxy",
+    version="2.0.0"
 )
 
 app.add_middleware(
@@ -26,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# URLs de los servicios
 SERVICE_URLS = {
     "auth": os.getenv("AUTH_SERVICE_URL", "http://auth-service:8001"),
     "data-harvester": os.getenv("DATA_HARVESTER_URL", "http://data-harvester:8002"),
@@ -35,7 +36,7 @@ SERVICE_URLS = {
     "search-service": os.getenv("SEARCH_SERVICE_URL", "http://search-service:8006")
 }
 
-http_client = httpx.AsyncClient()
+http_client = httpx.AsyncClient(timeout=30.0)
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -44,86 +45,166 @@ async def shutdown_event():
 
 @app.get("/")
 async def root():
-    """Endpoint raíz para verificar que el servicio está funcionando."""
     return {
-        "message": "API Gateway is running",
-        "services": {
-            service: url for service, url in SERVICE_URLS.items()
-        }
+        "message": "API Gateway - Sistema de Búsqueda Semántica",
+        "version": "2.0.0",
+        "services": list(SERVICE_URLS.keys())
     }
 
-@app.api_route("/api/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
-async def auth_proxy(request: Request, path: str):
-    """Proxy para el servicio de autenticación."""
-    return await proxy_request(request, "auth", path)
-
-@app.api_route("/data-harvester/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
-async def data_harvester_proxy(request: Request, path: str):
-    """Proxy para el servicio de recolección de datos."""
-    return await proxy_request(request, "data-harvester", path)
-
-@app.api_route("/api/data/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
-async def data_storage_proxy(request: Request, path: str):
-    """Proxy para el servicio de almacenamiento de datos."""
-    return await proxy_request(request, "data-storage", path)
-
-@app.api_route("/data-processor/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
-async def data_processor_proxy(request: Request, path: str):
-    """Proxy para el servicio de procesamiento de datos."""
-    return await proxy_request(request, "data-processor", path)
-
-@app.api_route("/embedding-service/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
-async def embedding_service_proxy(request: Request, path: str):
-    """Proxy para el servicio de embeddings."""
-    return await proxy_request(request, "embedding-service", path)
-
-@app.api_route("/search/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
-async def search_service_proxy(request: Request, path: str):
-    """Proxy para el servicio de búsqueda."""
-    return await proxy_request(request, "search-service", path)
-
-async def proxy_request(request: Request, service: str, path: str):
-    if service not in SERVICE_URLS:
-        raise HTTPException(status_code=404, detail=f"Servicio '{service}' no encontrado")
+@app.get("/health")
+async def health_check():
+    """Verificar el estado de todos los servicios."""
+    health_status = {"gateway": "healthy", "services": {}}
     
-    target_url = f"{SERVICE_URLS[service]}/{path}"
+    for service_name, service_url in SERVICE_URLS.items():
+        try:
+            response = await http_client.get(f"{service_url}/", timeout=5.0)
+            health_status["services"][service_name] = {
+                "status": "healthy" if response.status_code == 200 else "unhealthy",
+                "url": service_url
+            }
+        except Exception as e:
+            health_status["services"][service_name] = {
+                "status": "unreachable",
+                "url": service_url,
+                "error": str(e)
+            }
     
-    method = request.method
+    return health_status
 
+async def proxy_request(service_name: str, path: str, request: Request) -> Response:
+    """
+    Función genérica para proxificar requests a los servicios.
     
+    Args:
+        service_name: Nombre del servicio
+        path: Path de la request
+        request: Request original
+        
+    Returns:
+        Response del servicio
+    """
+    if service_name not in SERVICE_URLS:
+        raise HTTPException(status_code=404, detail=f"Service {service_name} not found")
+    
+    service_url = SERVICE_URLS[service_name]
+    target_url = f"{service_url}{path}"
+    
+    # Obtener headers (excluir algunos que pueden causar problemas)
     headers = dict(request.headers)
     headers.pop("host", None) 
+    headers.pop("content-length", None)
     
-    params = dict(request.query_params)
-    body = await request.body()
+    # Obtener query parameters
+    query_params = str(request.url.query)
+    if query_params:
+        target_url += f"?{query_params}"
     
     try:
+        # Obtener el body si existe
+        body = None
+        if request.method in ["POST", "PUT", "PATCH"]:
+            body = await request.body()
+    
+        # Hacer la request al servicio
         response = await http_client.request(
-            method=method,
+            method=request.method,
             url=target_url,
             headers=headers,
-            params=params,
             content=body,
-            # timeout=30.0
+            timeout=30.0
         )
+        
+        # Crear response
+        response_headers = dict(response.headers)
+        response_headers.pop("content-encoding", None)
+        response_headers.pop("content-length", None)
         
         return Response(
             content=response.content,
             status_code=response.status_code,
-            headers=dict(response.headers),
-            background=BackgroundTask(response.aclose)
+            headers=response_headers
         )
+        
+    except httpx.TimeoutException:
+        logger.error(f"Timeout calling {service_name} service at {target_url}")
+        raise HTTPException(status_code=504, detail=f"Timeout calling {service_name} service")
     except httpx.RequestError as e:
-        logger.error(f"Error al enviar solicitud a {target_url}: {str(e)}")
-        raise HTTPException(status_code=503, detail=f"Error al comunicarse con el servicio: {str(e)}")
+        logger.error(f"Error calling {service_name} service: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Error connecting to {service_name} service")
+    except Exception as e:
+        logger.error(f"Unexpected error proxying to {service_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# =====================================================
+# RUTAS DE AUTENTICACIÓN (AUTH SERVICE)
+# =====================================================
+
+@app.api_route("/api/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_auth(path: str, request: Request):
+    """Proxy para el servicio de autenticación."""
+    return await proxy_request("auth", f"/{path}", request)
+
+# =====================================================
+# RUTAS DE INTEGRACIÓN Y COSECHA (DATA HARVESTER)
+# =====================================================
+# Las rutas específicas se eliminaron para usar solo la ruta genérica /data-harvester/{path:path}
+
+# =====================================================
+# RUTAS DE ALMACENAMIENTO (DATA STORAGE)
+# =====================================================
+
+@app.api_route("/api/data/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_data_storage(path: str, request: Request):
+    """Proxy para el servicio de almacenamiento de datos."""
+    return await proxy_request("data-storage", f"/{path}", request)
+
+# =====================================================
+# RUTAS DE PROCESAMIENTO (DATA PROCESSOR)
+# =====================================================
+
+@app.api_route("/api/process/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_data_processor(path: str, request: Request):
+    """Proxy para el servicio de procesamiento de datos."""
+    return await proxy_request("data-processor", f"/{path}", request)
+
+# =====================================================
+# RUTAS DE EMBEDDINGS (EMBEDDING SERVICE)
+# =====================================================
+
+@app.api_route("/api/embeddings/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_embeddings(path: str, request: Request):
+    """Proxy para el servicio de embeddings."""
+    return await proxy_request("embedding-service", f"/{path}", request)
+
+# =====================================================
+# RUTAS DE BÚSQUEDA (SEARCH SERVICE)
+# =====================================================
+
+@app.api_route("/search/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_search(path: str, request: Request):
+    """Proxy para el servicio de búsqueda."""
+    return await proxy_request("search-service", f"/{path}", request)
+
+# =====================================================
+# RUTAS ESPECÍFICAS PARA COMPATIBILIDAD
+# =====================================================
+
+@app.api_route("/data-harvester/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_data_harvester_direct(path: str, request: Request):
+    """Proxy directo para el data-harvester (compatibilidad)."""
+    return await proxy_request("data-harvester", f"/{path}", request)
+
+@app.api_route("/data-processor/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_data_processor_direct(path: str, request: Request):
+    """Proxy directo para el data-processor (compatibilidad)."""
+    return await proxy_request("data-processor", f"/{path}", request)
+
+@app.api_route("/data-storage/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_data_storage_direct(path: str, request: Request):
+    """Proxy directo para el data-storage (compatibilidad)."""
+    return await proxy_request("data-storage", f"/{path}", request)
 
 if __name__ == "__main__":
-    host = os.getenv("API_GATEWAY_HOST", "0.0.0.0")
-    port = int(os.getenv("API_GATEWAY_PORT", "8000"))
-    
-    uvicorn.run(
-        "main:app",
-        host=host,
-        port=port,
-        reload=False
-    ) 
+    port = int(os.getenv("API_GATEWAY_PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True) 

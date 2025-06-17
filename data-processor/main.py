@@ -35,6 +35,9 @@ app.add_middleware(
 # Initialize preprocessing factory
 preprocessing_factory = PreprocessingFactory()
 
+# Job storage in memory (in production this would be a database)
+jobs_store: Dict[str, Dict[str, Any]] = {}
+
 # Models
 class ProcessRequest(BaseModel):
     job_id: Optional[str] = None
@@ -53,10 +56,58 @@ class ProcessResponse(BaseModel):
 async def root():
     return {"message": "Data Processor Service is running"}
 
+@app.get("/operations")
+async def get_available_operations():
+    """Get available preprocessing operations"""
+    try:
+        operations = preprocessing_factory.get_available_operations()
+        return {"operations": operations}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting operations: {str(e)}")
+
+@app.post("/test")
+async def test_processing_config(request: ProcessRequest):
+    """Test a processing configuration with sample data"""
+    try:
+        # Create preprocessor
+        preprocessor = Preprocessor()
+        
+        # Apply operations to sample data
+        processed_data = request.dataset
+        for operation in request.operations:
+            operation_id = operation.get("id")
+            parameters = operation.get("parameters", {})
+            
+            # Get operation handler
+            operation_handler = preprocessing_factory.get_operation(operation_id)
+            
+            # Apply operation
+            processed_data = operation_handler.process(processed_data, parameters)
+        
+        return {
+            "success": True,
+            "message": f"Successfully processed {len(processed_data)} items with {len(request.operations)} operations",
+            "result": processed_data[:5] if len(processed_data) > 5 else processed_data  # Return first 5 items as preview
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error testing processing config: {str(e)}"
+        }
+
 @app.post("/process", response_model=ProcessResponse)
 async def process_data(request: ProcessRequest, background_tasks: BackgroundTasks):
     """Start a data processing job"""
     job_id = request.job_id or str(uuid.uuid4())
+    
+    # Initialize job in store
+    jobs_store[job_id] = {
+        "job_id": job_id,
+        "status": "started",
+        "message": f"Processing job started with {len(request.operations)} operations",
+        "data": None,
+        "error": None
+    }
     
     # Start processing in background
     background_tasks.add_task(
@@ -77,68 +128,15 @@ async def process_data(request: ProcessRequest, background_tasks: BackgroundTask
 @app.get("/jobs/{job_id}", response_model=ProcessResponse)
 async def get_job_status(job_id: str):
     """Get the status of a processing job"""
-    # In a real implementation, this would check a database or cache
-    # For now, we'll just return a placeholder
+    if job_id not in jobs_store:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job_data = jobs_store[job_id]
     return {
-        "job_id": job_id,
-        "status": "unknown",
-        "message": "Job status retrieval not implemented yet",
-        "data": None
-    }
-
-@app.get("/operations")
-async def get_available_operations():
-    """Get all available preprocessing operations"""
-    return {
-        "operations": [
-            {
-                "id": "text-cleaning",
-                "name": "Text Cleaning",
-                "description": "Clean text data by removing special characters, HTML tags, etc.",
-                "parameters": {
-                    "remove_html": "boolean",
-                    "remove_urls": "boolean",
-                    "remove_special_chars": "boolean"
-                }
-            },
-            {
-                "id": "text-normalization",
-                "name": "Text Normalization",
-                "description": "Normalize text by converting to lowercase, removing accents, etc.",
-                "parameters": {
-                    "lowercase": "boolean",
-                    "remove_accents": "boolean",
-                    "remove_stopwords": "boolean"
-                }
-            },
-            {
-                "id": "text-tokenization",
-                "name": "Text Tokenization",
-                "description": "Tokenize text into words or sentences",
-                "parameters": {
-                    "tokenize_type": "string",
-                    "min_token_length": "number"
-                }
-            },
-            {
-                "id": "missing-data",
-                "name": "Missing Data Handling",
-                "description": "Handle missing data in the dataset",
-                "parameters": {
-                    "strategy": "string",
-                    "fill_value": "string"
-                }
-            },
-            {
-                "id": "data-transformation",
-                "name": "Data Transformation",
-                "description": "Transform data using various methods",
-                "parameters": {
-                    "method": "string",
-                    "columns": "array"
-                }
-            }
-        ]
+        "job_id": job_data["job_id"],
+        "status": job_data["status"],
+        "message": job_data["message"],
+        "data": job_data["data"]
     }
 
 # Background task for processing data
@@ -149,6 +147,11 @@ async def process_data_job(job_id: str, dataset: List[Dict[str, Any]], operation
     error = None
     
     try:
+        # Update job status to processing
+        if job_id in jobs_store:
+            jobs_store[job_id]["status"] = "processing"
+            jobs_store[job_id]["message"] = "Processing data..."
+        
         # Create preprocessor
         preprocessor = Preprocessor()
         
@@ -172,27 +175,24 @@ async def process_data_job(job_id: str, dataset: List[Dict[str, Any]], operation
         }
         
         status = "completed"
+        message = f"Successfully processed {len(processed_data)} items with {len(operations)} operations"
+        
     except Exception as e:
         status = "failed"
         error = str(e)
+        message = f"Error processing job: {error}"
         print(f"Error processing job {job_id}: {error}")
     
-    # Notify orchestrator about job completion
-    try:
-        orchestrator_url = os.getenv("ORCHESTRATOR_URL", "http://localhost:8000")
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                f"{orchestrator_url}/jobs/update",
-                json={
-                    "job_id": job_id,
-                    "service": "data-processor",
+    # Update job status in store
+    if job_id in jobs_store:
+        jobs_store[job_id].update({
                     "status": status,
-                    "result": result,
+            "message": message,
+            "data": result,
                     "error": error
-                }
-            )
-    except Exception as e:
-        print(f"Error notifying orchestrator: {str(e)}")
+        })
+    
+    print(f"Job {job_id} completed with status: {status}")
 
 # Error handlers
 app.add_exception_handler(ValueError, ErrorHandler.value_error_handler)
@@ -200,4 +200,9 @@ app.add_exception_handler(Exception, ErrorHandler.general_exception_handler)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+    
+    # Get port from environment variable
+    port = int(os.getenv("DATA_PROCESSOR_PORT", "8004"))
+    host = os.getenv("DATA_PROCESSOR_HOST", "0.0.0.0")
+    
+    uvicorn.run("main:app", host=host, port=port, reload=True) 

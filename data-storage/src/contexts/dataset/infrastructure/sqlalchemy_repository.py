@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 import copy
+from contextlib import asynccontextmanager
 
 from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,50 +23,94 @@ class SQLAlchemyDatasetRepository(DatasetRepository):
     def __init__(self):
         logger.info("Repositorio SQLAlchemy de datasets inicializado")
 
-    def _get_session(self) -> AsyncSession:
-        return db.get_session()
+    @asynccontextmanager
+    async def _get_session(self) -> AsyncSession:
+        async with db.get_session() as session:
+            yield session
     
-    async def save(self, dataset: Dataset) -> Dataset: 
+    async def save(self, dataset: Dataset) -> Dataset:
+        logger.info(f"🔍 REPO - save inicio: dataset_id={dataset.id}, row_count={dataset.row_count}")
+        
         async with self._get_session() as session:
             try:
-                dataset_model = DatasetModel(
-                    id=str(dataset.id),
-                    name=dataset.name,
-                    description=dataset.description,
-                    created_at=dataset.created_at,
-                    updated_at=dataset.updated_at,
-                    user_id=dataset.user_id,
-                    row_count=dataset.row_count,
-                    column_count=dataset.column_count,
-                    tags=dataset.tags,
-                    is_public=dataset.is_public,
-                    prompt_strategy=dataset.prompt_strategy
-                )
+                # Verificar si ya existe el dataset
+                stmt = select(DatasetModel).where(DatasetModel.id == str(dataset.id))
+                result = await session.execute(stmt)
+                existing_dataset = result.scalar_one_or_none()
                 
-                session.add(dataset_model)
-                await session.flush()
-                for i, column in enumerate(dataset.columns):
-                    column_model = DatasetColumnModel(
-                        id=str(column.id),
-                        dataset_id=str(dataset.id),
-                        name=column.name,
-                        type=column.type,
-                        description=column.description
+                if existing_dataset:
+                    logger.info(f"🔍 REPO - Dataset existe, actualizando...")
+                    # Actualizar dataset existente
+                    existing_dataset.name = dataset.name
+                    existing_dataset.description = dataset.description
+                    existing_dataset.updated_at = dataset.updated_at
+                    existing_dataset.user_id = dataset.user_id
+                    existing_dataset.row_count = dataset.row_count
+                    existing_dataset.column_count = dataset.column_count
+                    existing_dataset.tags = dataset.tags
+                    existing_dataset.is_public = dataset.is_public
+                    existing_dataset.prompt_strategy = dataset.prompt_strategy
+                    
+                    # Agregar solo las nuevas filas
+                    logger.info(f"🔍 REPO - Agregando {len(dataset.rows)} filas...")
+                    for i, row in enumerate(dataset.rows):
+                        logger.info(f"🔍 REPO - Fila {i}: id={row.id}, data={row.data}")
+                        row_model = DatasetRowModel(
+                            id=str(row.id),
+                            dataset_id=str(dataset.id),
+                            data=row.data
+                        )
+                        session.add(row_model)
+                        logger.info(f"🔍 REPO - Fila {i} agregada a la sesión")
+                else:
+                    logger.info(f"🔍 REPO - Dataset nuevo, creando...")
+                    dataset_model = DatasetModel(
+                        id=str(dataset.id),
+                        name=dataset.name,
+                        description=dataset.description,
+                        created_at=dataset.created_at,
+                        updated_at=dataset.updated_at,
+                        user_id=dataset.user_id,
+                        row_count=dataset.row_count,
+                        column_count=dataset.column_count,
+                        tags=dataset.tags,
+                        is_public=dataset.is_public,
+                        prompt_strategy=dataset.prompt_strategy
                     )
-                    session.add(column_model)
+                    
+                    session.add(dataset_model)
+                    await session.flush()
+                    
+                    for i, column in enumerate(dataset.columns):
+                        column_model = DatasetColumnModel(
+                            id=str(column.id),
+                            dataset_id=str(dataset.id),
+                            name=column.name,
+                            type=column.type,
+                            description=column.description
+                        )
+                        session.add(column_model)
+                    
+                    for i, row in enumerate(dataset.rows):
+                        row_model = DatasetRowModel(
+                            id=str(row.id),
+                            dataset_id=str(dataset.id),
+                            data=row.data
+                        )
+                        session.add(row_model)
                 
-                for i, row in enumerate(dataset.rows):
-                    row_model = DatasetRowModel(
-                        id=str(row.id),
-                        dataset_id=str(dataset.id),
-                        data=row.data
-                    )
-                    session.add(row_model)
-                
+                logger.info(f"🔍 REPO - Haciendo commit...")
                 await session.commit()
+                logger.info(f"🔍 REPO - Commit exitoso")
                 
                 return copy.deepcopy(dataset)
             except Exception as e:
+                logger.error(f"❌ REPO - Error en save: {type(e).__name__}: {str(e)}")
+                logger.error(f"❌ REPO - Dataset ID: {dataset.id}")
+                logger.error(f"❌ REPO - Row count: {dataset.row_count}")
+                logger.error(f"❌ REPO - Rows: {[(r.id, r.data) for r in dataset.rows]}")
+                import traceback
+                logger.error(f"❌ REPO - Traceback: {traceback.format_exc()}")
                 await session.rollback()
                 raise
     

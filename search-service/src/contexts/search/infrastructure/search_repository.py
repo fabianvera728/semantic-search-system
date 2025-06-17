@@ -20,7 +20,7 @@ from ..domain.exceptions import (
 )
 
 # Importar las nuevas mejoras
-from ..domain.scoring_strategy import BalancedScoringStrategy, ScoringStrategy
+from ..domain.scoring_strategy import BalancedScoringStrategy, ScoringStrategy, AdvancedRelevanceStrategy
 from ..domain.result_diversifier import MMRDiversifier, DiversificationConfig
 from ..domain.search_quality_metrics import SearchQualityAnalyzer, PerformanceMonitor
 from .intelligent_cache import IntelligentCache, CacheConfig, CacheManager
@@ -44,7 +44,12 @@ class SearchRepositoryImpl(SearchRepository):
         self.embedding_cache = {}
         
         # Inicializar nuevos componentes mejorados
-        self.scoring_strategy: ScoringStrategy = BalancedScoringStrategy()
+        # Usar la estrategia avanzada que implementa el sistema multifacético completo
+        self.scoring_strategy: ScoringStrategy = AdvancedRelevanceStrategy(
+            global_calibration_factor=0.85,  # Factor de calibración global
+            lexical_boost_max=0.15,          # Boost léxico máximo del 15%
+            enable_dynamic_calibration=True  # Calibración dinámica para híbridos
+        )
         self.result_diversifier = MMRDiversifier()
         self.diversification_config = DiversificationConfig()
         self.quality_analyzer = SearchQualityAnalyzer()
@@ -60,7 +65,8 @@ class SearchRepositoryImpl(SearchRepository):
         self.search_cache = self.cache_manager.create_cache("search_results", cache_config)
         
         logger.info(f"Repositorio de búsqueda mejorado inicializado con URL de almacenamiento: {self.data_storage_url}")
-        logger.info(f"Mejoras habilitadas - Scoring balanceado: ✓, Diversificación MMR: ✓, Caché inteligente: ✓, Métricas de calidad: ✓")
+        logger.info(f"Mejoras habilitadas - Estrategia Avanzada de Relevancia: ✓, Diversificación MMR: ✓, Caché inteligente: ✓, Métricas de calidad: ✓")
+        logger.info(f"Sistema multifacético activado - Normalización vectorial: ✓, Transformación sigmoide: ✓, Métricas alternativas: ✓, Calibración dinámica: ✓")
     
     async def search(self, request: SearchRequest) -> SearchResults:
         start_time = time.time()
@@ -239,7 +245,7 @@ class SearchRepositoryImpl(SearchRepository):
         limit: int,
         model_name: str
     ) -> List[SearchResult]:
-        """Búsqueda semántica mejorada con estrategia de puntuación balanceada"""
+        """Búsqueda semántica mejorada con estrategia de relevancia avanzada"""
         
         # Preprocesamiento de la consulta
         clean_query = query.strip()
@@ -252,15 +258,27 @@ class SearchRepositoryImpl(SearchRepository):
         )
         query_embedding = await self.embedding_repository.generate_embeddings(embedding_request)
         
-        # Búsqueda en el índice FAISS
-        search_limit = min(limit, len(embedding_collection.embeddings))
+        # Búsqueda en el índice FAISS con más candidatos para mejor normalización
+        search_limit = min(limit * 3, len(embedding_collection.embeddings))  # Más candidatos
         distances, indices = index.search(query_embedding, search_limit)
 
         logger.debug(f"[📏] Metric type: {index.metric_type}")
         logger.debug(f"[🔍] Enhanced search for: {clean_query}")
         logger.debug(f"[🔍] Found {len(indices[0])} initial matches")
-        from sklearn.feature_extraction.text import TfidfVectorizer
-
+        
+        # Calcular estadísticas de distancia para normalización
+        valid_distances = [float(distances[0][i]) for i in range(len(indices[0])) 
+                          if indices[0][i] >= 0 and indices[0][i] < len(embedding_collection.embeddings)]
+        
+        distance_stats = {
+            'min_distance': min(valid_distances) if valid_distances else 0.0,
+            'max_distance': max(valid_distances) if valid_distances else 1.0,
+            'mean_distance': sum(valid_distances) / len(valid_distances) if valid_distances else 0.5
+        }
+        
+        logger.debug(f"Distance stats - Min: {distance_stats['min_distance']:.4f}, "
+                    f"Max: {distance_stats['max_distance']:.4f}, "
+                    f"Mean: {distance_stats['mean_distance']:.4f}")
         
         results = []
         for i, idx in enumerate(indices[0]):
@@ -269,41 +287,44 @@ class SearchRepositoryImpl(SearchRepository):
                 
             embedding = embedding_collection.embeddings[idx]
             result_terms = set(embedding.text.lower().split())
+            semantic_distance = float(distances[0][i])
             
-            # Usar nueva estrategia de puntuación balanceada
-            cosine_sim = 1.0 - float(distances[0][i])   # si usas L2 sobre vectores unitarios
-            diversity_penalty = 0
-            # o directamente: cosine_sim = float(similarities[0][i]) si tu índice devuelve similes
-
-            # 2) Prepara vector TF–IDF para el term_score:
-            #    (cachea tu vectorizer en el objeto para no regenerarlo por cada hit)
-
-            if not hasattr(self, '_tfidf_vectorizer'):
-                texts = embedding_collection.get_texts()
-                self._tfidf_vectorizer = TfidfVectorizer().fit(texts + [clean_query])
-            query_tfidf = self._tfidf_vectorizer.transform([clean_query])
-            result_tfidf = self._tfidf_vectorizer.transform([embedding.text])
-            tfidf_term_score = cosine_similarity(query_tfidf, result_tfidf)[0][0]
-
-            # 3) Llamada reconfigurada a tu estrategia, pasando ahora `cosine_sim` y `tfidf_term_score`:
+            # Crear contexto enriquecido para la estrategia avanzada
+            context = {
+                'distance_stats': distance_stats,
+                'search_type': 'semantic',
+                'query': clean_query,
+                'query_terms': query_terms,
+                'result_terms': result_terms,
+                'found_by_multiple_methods': False,  # Solo semántico en este método
+                'min_confidence': 0.1
+            }
+            
+            # Usar estrategia de relevancia avanzada
             final_score = self.scoring_strategy.calculate_score(
-                semantic_score=cosine_sim,
-                term_score=tfidf_term_score,
+                semantic_distance=semantic_distance,
+                query_terms=query_terms,
+                result_terms=result_terms,
                 result_length=len(embedding.text),
                 query_length=len(clean_query),
-                diversity_penalty=diversity_penalty
+                diversity_penalty=0.0,
+                context=context
             )
             
-            # Crear metadatos enriquecidos
+            # Crear metadatos enriquecidos con información de debugging
             metadata = {
                 **embedding.metadata,
-                # "semantic_distance": semantic_distance,
+                "semantic_distance": semantic_distance,
+                "normalized_distance": 1.0 - ((semantic_distance - distance_stats['min_distance']) / 
+                                            (distance_stats['max_distance'] - distance_stats['min_distance']))
+                                            if distance_stats['max_distance'] > distance_stats['min_distance'] else 0.0,
                 "query_terms_count": len(query_terms),
                 "result_terms_count": len(result_terms),
                 "term_overlap": len(query_terms.intersection(result_terms)),
                 "text_length": len(embedding.text),
-                "scoring_method": "balanced_strategy",
-                "query": clean_query
+                "scoring_method": "advanced_relevance_strategy",
+                "query": clean_query,
+                "distance_stats": distance_stats
             }
             
             # Crear resultado de búsqueda
@@ -316,11 +337,12 @@ class SearchRepositoryImpl(SearchRepository):
             
             results.append(result)
         
-        # Ordenar por puntuación descendente
+        # Ordenar por puntuación descendente y limitar resultados
         results.sort(key=lambda x: x.score, reverse=True)
+        limited_results = results[:limit]
         
-        logger.debug(f"Enhanced semantic search completed - {len(results)} results")
-        return results
+        logger.debug(f"Enhanced semantic search completed - {len(limited_results)} final results")
+        return limited_results
     
     async def _enhanced_hybrid_search(
         self, 
@@ -379,31 +401,79 @@ class SearchRepositoryImpl(SearchRepository):
                     "metadata": result.metadata or {}
                 }
         
-        # Calcular puntuación combinada usando estrategia de scoring
+        # Calcular estadísticas de distancia para calibración avanzada
+        all_semantic_scores = [data["semantic_score"] for data in combined_results.values() if data["semantic_score"] > 0]
+        all_keyword_scores = [data["keyword_score"] for data in combined_results.values() if data["keyword_score"] > 0]
+        
+        distance_stats = {
+            'min_distance': 1.0 - max(all_semantic_scores) if all_semantic_scores else 0.0,
+            'max_distance': 1.0 - min(all_semantic_scores) if all_semantic_scores else 1.0,
+            'mean_distance': 1.0 - (sum(all_semantic_scores) / len(all_semantic_scores)) if all_semantic_scores else 0.5
+        }
+        
+        # Usar estrategia avanzada con calibración dinámica para híbridos
         final_results = []
         for result_id, result_data in combined_results.items():
-            # Combinar puntuaciones semántica y de palabras clave
-            semantic_weight = alpha
-            keyword_weight = 1 - alpha
+            # Detectar si fue encontrado por múltiples métodos
+            found_by_multiple = result_data["semantic_score"] > 0 and result_data["keyword_score"] > 0
             
-            combined_score = (semantic_weight * result_data["semantic_score"] + 
-                            keyword_weight * result_data["keyword_score"])
+            # Crear contexto para calibración dinámica híbrida
+            context = {
+                'distance_stats': distance_stats,
+                'search_type': 'hybrid',
+                'query': clean_query,
+                'query_terms': query_terms,
+                'result_terms': set(result_data["text"].lower().split()),
+                'found_by_multiple_methods': found_by_multiple,
+                'min_confidence': 0.15,  # Umbral más alto para híbridos
+                'semantic_score': result_data["semantic_score"],
+                'keyword_score': result_data["keyword_score"],
+                'alpha': alpha
+            }
+            
+            # Calcular distancia semántica aproximada
+            estimated_semantic_distance = 1.0 - result_data["semantic_score"] if result_data["semantic_score"] > 0 else 1.0
+            
+            # Usar estrategia avanzada para cálculo final
+            if hasattr(self.scoring_strategy, 'calculate_score') and len(self.scoring_strategy.calculate_score.__code__.co_varnames) > 6:
+                # Nueva estrategia avanzada
+                final_score = self.scoring_strategy.calculate_score(
+                    semantic_distance=estimated_semantic_distance,
+                    query_terms=query_terms,
+                    result_terms=set(result_data["text"].lower().split()),
+                    result_length=len(result_data["text"]),
+                    query_length=len(clean_query),
+                    diversity_penalty=0.0,
+                    context=context
+                )
+            else:
+                # Fallback a cálculo tradicional
+                semantic_weight = alpha
+                keyword_weight = 1 - alpha
+                final_score = (semantic_weight * result_data["semantic_score"] + 
+                              keyword_weight * result_data["keyword_score"])
+                
+                # Aplicar boost manual por coincidencia múltiple
+                if found_by_multiple:
+                    final_score *= 1.1
             
             # Crear metadatos enriquecidos
             metadata = {
                 **result_data["metadata"],
                 "semantic_score": result_data["semantic_score"],
                 "keyword_score": result_data["keyword_score"],
-                "combined_score": combined_score,
+                "combined_score": final_score,
                 "alpha_used": alpha,
-                "search_method": "enhanced_hybrid",
+                "search_method": "enhanced_hybrid_advanced",
+                "found_by_multiple_methods": found_by_multiple,
+                "estimated_semantic_distance": estimated_semantic_distance,
                 "query": clean_query
             }
             
             result = SearchResult(
                 id=result_data["id"],
                 text=result_data["text"],
-                score=combined_score,
+                score=final_score,
                 metadata=metadata
             )
             final_results.append(result)

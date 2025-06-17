@@ -49,6 +49,8 @@ services:
       - DATA_HARVESTER_PORT=8002
       - AUTH_SERVICE_URL=http://auth-service:8001
       - DATA_HARVESTER_LOG_LEVEL=INFO
+      - AUTH_SERVICE_JWT_SECRET=your-secret-key-change-in-production
+      - AUTH_SERVICE_JWT_ALGORITHM=HS256
     depends_on:
       - auth-service
     networks:
