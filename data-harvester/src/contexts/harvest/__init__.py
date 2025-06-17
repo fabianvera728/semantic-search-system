@@ -1,0 +1,1 @@
+# Contexto de cosecha de datos 

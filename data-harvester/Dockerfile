@@ -15,7 +15,10 @@ COPY . .
 RUN mkdir -p uploads data
 
 # Exponer puerto
-EXPOSE 8000
+EXPOSE 8002
+
+# Variables de entorno
+ENV DATA_HARVESTER_PORT=8002
 
 # Comando para iniciar la aplicación
-CMD ["python", "-m", "src.main"] 
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"] 
