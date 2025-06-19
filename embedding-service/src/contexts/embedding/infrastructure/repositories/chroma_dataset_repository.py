@@ -134,13 +134,35 @@ class ChromaDatasetRepository(DatasetRepository):
     async def _get_collection_metadata(self, client, collection_name):
         try:
             logger.debug(f"Checking if collection exists: {collection_name}")
+            
+            # Primero verificar si la colección existe en la lista de colecciones
+            try:
+                collections = client.list_collections()
+                collection_names = [col.name for col in collections]
+                logger.debug(f"Available collections: {collection_names}")
+                
+                if collection_name not in collection_names:
+                    logger.debug(f"Collection {collection_name} not found in collection list")
+                    return {}, False
+                    
+            except Exception as list_err:
+                logger.warning(f"Error listing collections: {str(list_err)}")
+                # Continuar con get_collection como fallback
+            
+            # Intentar obtener la colección
             collection = client.get_collection(collection_name)
             if hasattr(collection, 'metadata') and collection.metadata:
                 logger.debug(f"Found collection metadata: {collection.metadata}")
                 return collection.metadata, True
             return {}, True
+            
+        except ValueError as ve:
+            # ChromaDB lanza ValueError cuando la colección no existe
+            logger.debug(f"Collection {collection_name} not found (ValueError): {str(ve)}")
+            return {}, False
         except Exception as e:
-            logger.debug(f"Collection {collection_name} not found: {str(e)}")
+            # Para otros errores (como HTTP 400), logear más información
+            logger.warning(f"Error checking collection {collection_name}: {type(e).__name__}: {str(e)}")
             return {}, False
             
     async def _get_metadata_from_metadata_collection(self, client, dataset_id):

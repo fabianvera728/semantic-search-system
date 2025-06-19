@@ -42,18 +42,27 @@ def get_or_create_collection(client: chromadb.Client, name: str, metadata=None):
         metadata = {"created_by": "embedding_service", "created_at": datetime.now().isoformat()}
 
     try:
+        logger.debug(f"Attempting to get collection: {name}")
         collection = client.get_collection(name=name)
+        logger.debug(f"Successfully retrieved existing collection: {name}")
         return collection
+    except ValueError as ve:
+        # ChromaDB lanza ValueError cuando la colección no existe
+        logger.debug(f"Collection {name} not found (ValueError), creating new one: {str(ve)}")
     except Exception as e:
-        raise e
+        # Para otros errores, logear más información
+        logger.warning(f"Error getting collection {name}: {type(e).__name__}: {str(e)}")
+        logger.debug(f"Attempting to create collection: {name}")
     
     # Si llegamos aquí, necesitamos crear la colección
     try:
         logger.info(f"Creating new collection: {name}")
-        return client.create_collection(
+        collection = client.create_collection(
             name=name,
             metadata=metadata
         )
+        logger.info(f"Successfully created collection: {name}")
+        return collection
     except Exception as create_err:
-        logger.error(f"Failed to create collection {name}: {str(create_err)}")
+        logger.error(f"Failed to create collection {name}: {type(create_err).__name__}: {str(create_err)}")
         raise create_err 

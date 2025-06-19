@@ -195,14 +195,33 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
     async def list_embeddings(self, request: ListEmbeddingsRequest) -> List[Embedding]:
         try:
             client = await self.get_chroma_client()
-
-            collection_names = client.list_collections()
             collection_name = self._get_dataset_collection_name(request.dataset_id)
             
-            if collection_name not in collection_names:
-                raise DatasetNotFoundError(request.dataset_id)
+            # Mejorar la verificación de existencia de colección
+            try:
+                collections = client.list_collections()
+                collection_names = [col.name for col in collections]
+                logger.debug(f"Available collections: {collection_names}")
+                
+                if collection_name not in collection_names:
+                    logger.info(f"Collection {collection_name} not found in available collections")
+                    raise DatasetNotFoundError(request.dataset_id)
+                    
+            except DatasetNotFoundError:
+                raise
+            except Exception as list_err:
+                logger.warning(f"Error listing collections: {str(list_err)}")
+                # Continuar con get_collection como fallback
 
-            collection = client.get_collection(collection_name)
+            # Intentar obtener la colección
+            try:
+                collection = client.get_collection(collection_name)
+            except ValueError as ve:
+                logger.info(f"Collection {collection_name} not found (ValueError): {str(ve)}")
+                raise DatasetNotFoundError(request.dataset_id)
+            except Exception as e:
+                logger.error(f"Error getting collection {collection_name}: {type(e).__name__}: {str(e)}")
+                raise DatasetNotFoundError(request.dataset_id)
 
             where = {"dataset_id": request.dataset_id}
             if request.filter_criteria:
@@ -215,6 +234,7 @@ class ChromaEmbeddingRepository(EmbeddingRepository):
                     where=where
                 )
             except Exception as e:
+                logger.warning(f"Error with where clause, trying without: {str(e)}")
                 result = collection.get(
                     include=["embeddings", "documents", "metadatas"]
                 )
